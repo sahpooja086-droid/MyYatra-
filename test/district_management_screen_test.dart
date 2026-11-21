@@ -4,11 +4,17 @@ import 'package:myyatra/models/district_model.dart';
 import 'package:myyatra/screens/admin/district_management_screen.dart';
 
 void main() {
-  testWidgets('Add opens local form and preview is not added to the list',
-      (tester) async {
-    await tester.pumpWidget(MaterialApp(
-      home: DistrictManagementScreen(districtsStream: Stream.value(const [])),
-    ));
+  testWidgets('Add opens local form and preview is not added to the list', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DistrictManagementScreen(
+          districtsStream: Stream.value(const []),
+          isAdministrator: true,
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Add District'));
@@ -34,8 +40,9 @@ void main() {
     expect(find.text('New District'), findsNothing);
   });
 
-  testWidgets('Edit opens form with district values and does not change list',
-      (tester) async {
+  testWidgets('Edit opens form with district values and does not change list', (
+    tester,
+  ) async {
     final district = DistrictModel(
       id: 'kaski',
       name: 'Kaski',
@@ -43,11 +50,14 @@ void main() {
       description: 'Lake and mountain scenery',
       experienceTypes: const ['Nature'],
     );
-    await tester.pumpWidget(MaterialApp(
-      home: DistrictManagementScreen(
-        districtsStream: Stream.value([district]),
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DistrictManagementScreen(
+          districtsStream: Stream.value([district]),
+          isAdministrator: true,
+        ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
 
     await tester.tap(find.byTooltip('Preview district changes (not saved)'));
@@ -56,9 +66,7 @@ void main() {
     expect(find.text('Gandaki'), findsOneWidget);
     expect(find.text('Lake and mountain scenery'), findsOneWidget);
 
-    await tester.tap(
-      find.byKey(const ValueKey('district-dropdown-Gandaki')),
-    );
+    await tester.tap(find.byKey(const ValueKey('district-dropdown-Gandaki')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Myagdi').last);
     await tester.pumpAndSettle();
@@ -84,9 +92,7 @@ Future<void> _completeForm(WidgetTester tester) async {
   await tester.pumpAndSettle();
   await tester.tap(find.text('Bagmati').last);
   await tester.pumpAndSettle();
-  await tester.tap(
-    find.byKey(const ValueKey('district-dropdown-Bagmati')),
-  );
+  await tester.tap(find.byKey(const ValueKey('district-dropdown-Bagmati')));
   await tester.pumpAndSettle();
   await tester.tap(find.text('Kathmandu').last);
   await tester.pumpAndSettle();

@@ -24,8 +24,9 @@ void main() {
     expect(find.text('Kaski'), findsNothing);
   });
 
-  testWidgets('province filter shows only districts from that province',
-      (tester) async {
+  testWidgets('province filter shows only districts from that province', (
+    tester,
+  ) async {
     await _showScreen(tester, districts);
 
     await _selectProvince(tester, 'Gandaki');
@@ -50,8 +51,9 @@ void main() {
     expect(find.text('Kaski'), findsNothing);
   });
 
-  testWidgets('shows a helpful message when filters match no districts',
-      (tester) async {
+  testWidgets('shows a helpful message when filters match no districts', (
+    tester,
+  ) async {
     await _showScreen(tester, districts);
 
     await tester.enterText(
@@ -66,8 +68,9 @@ void main() {
     );
   });
 
-  testWidgets('empty legacy fields display placeholders without mutation',
-      (tester) async {
+  testWidgets('empty legacy fields display placeholders without mutation', (
+    tester,
+  ) async {
     final legacyDistrict = _district('legacy', '', '  ');
     await _showScreen(tester, [legacyDistrict]);
 
@@ -82,11 +85,14 @@ Future<void> _showScreen(
   WidgetTester tester,
   List<DistrictModel> districts,
 ) async {
-  await tester.pumpWidget(MaterialApp(
-    home: DistrictManagementScreen(
-      districtsStream: Stream.value(districts),
+  await tester.pumpWidget(
+    MaterialApp(
+      home: DistrictManagementScreen(
+        districtsStream: Stream.value(districts),
+        isAdministrator: true,
+      ),
     ),
-  ));
+  );
   await tester.pumpAndSettle();
 }
 

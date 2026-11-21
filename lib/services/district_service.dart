@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../data/nepal_district_directory.dart';
 import '../models/district_model.dart';
 import 'district_data_validator.dart';
+import 'district_mutation_service.dart';
 
 abstract interface class DistrictRepository {
   Stream<List<DistrictModel>> watchAll();
@@ -124,7 +125,7 @@ class FirestoreDistrictRepository implements DistrictRepository {
   }
 }
 
-class DistrictService {
+class DistrictService implements DistrictMutationService {
   DistrictService({DistrictRepository? repository})
     : _repository = repository ?? FirestoreDistrictRepository();
 
@@ -152,6 +153,7 @@ class DistrictService {
     return _runFirestoreOperation('read', () => _repository.getById(id));
   }
 
+  @override
   Future<void> addDistrict(DistrictModel district) async {
     final normalized = DistrictDataValidator.normalize(
       district,
@@ -167,6 +169,7 @@ class DistrictService {
     });
   }
 
+  @override
   Future<void> updateDistrict(DistrictModel district) async {
     final normalized = DistrictDataValidator.normalize(
       district,
@@ -204,6 +207,7 @@ class DistrictService {
     });
   }
 
+  @override
   Future<void> deleteDistrict(String id) {
     if (id.trim().isEmpty) {
       throw const DistrictValidationException('District ID is required.');

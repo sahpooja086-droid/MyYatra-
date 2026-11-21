@@ -49,9 +49,16 @@ class DistrictFormRules {
 /// A local-only district form. The result is returned to the caller; this
 /// screen intentionally does not perform Firestore writes.
 class DistrictFormScreen extends StatefulWidget {
-  const DistrictFormScreen({super.key, this.district});
+  const DistrictFormScreen({
+    super.key,
+    this.district,
+    this.previewOnly = true,
+    this.submitLabel = 'Preview District',
+  });
 
   final DistrictModel? district;
+  final bool previewOnly;
+  final String submitLabel;
 
   @override
   State<DistrictFormScreen> createState() => _DistrictFormScreenState();
@@ -75,20 +82,24 @@ class _DistrictFormScreenState extends State<DistrictFormScreen> {
   void initState() {
     super.initState();
     final district = widget.district;
-    _descriptionController =
-        TextEditingController(text: district?.description ?? '');
+    _descriptionController = TextEditingController(
+      text: district?.description ?? '',
+    );
     _province = DistrictFormRules.provinces.contains(district?.province)
         ? district?.province
         : null;
 
     if (district != null) {
-      final canonicalDistrict = NepalDistrictDirectory.byId(district.id) ??
+      final canonicalDistrict =
+          NepalDistrictDirectory.byId(district.id) ??
           NepalDistrictDirectory.byName(district.name);
       final savedName = district.name.trim().toLowerCase();
-      final nameMatchesCanonical = canonicalDistrict != null &&
+      final nameMatchesCanonical =
+          canonicalDistrict != null &&
           (canonicalDistrict.name.toLowerCase() == savedName ||
-              canonicalDistrict.alternateNames
-                  .any((alias) => alias.toLowerCase() == savedName));
+              canonicalDistrict.alternateNames.any(
+                (alias) => alias.toLowerCase() == savedName,
+              ));
       if (canonicalDistrict != null &&
           canonicalDistrict.province == district.province &&
           nameMatchesCanonical) {
@@ -156,177 +167,197 @@ class _DistrictFormScreenState extends State<DistrictFormScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-              DropdownButtonFormField<String>(
-                key: const Key('district-province-field'),
-                initialValue: _province,
-                decoration: const InputDecoration(
-                  labelText: 'Province',
-                  prefixIcon: Icon(Icons.map, color: purple),
-                  border: OutlineInputBorder(),
-                ),
-                items: NepalDistrictDirectory.provinces
-                    .map((province) => DropdownMenuItem(
-                          value: province,
-                          child: Text(province),
-                        ))
-                    .toList(),
-                onChanged: (value) => setState(() {
-                  if (_province != value) {
-                    _province = value;
-                    _selectedDistrict = null;
-                    _legacyDistrictIssue = null;
-                  }
-                }),
-                validator: DistrictFormRules.validateProvince,
-              ),
-              const SizedBox(height: 16),
-              if (_legacyDistrictIssue != null) ...[
-                Text(
-                  _legacyDistrictIssue!,
-                  key: const Key('district-legacy-warning'),
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.error,
+                  DropdownButtonFormField<String>(
+                    key: const Key('district-province-field'),
+                    initialValue: _province,
+                    decoration: const InputDecoration(
+                      labelText: 'Province',
+                      prefixIcon: Icon(Icons.map, color: purple),
+                      border: OutlineInputBorder(),
+                    ),
+                    items: NepalDistrictDirectory.provinces
+                        .map(
+                          (province) => DropdownMenuItem(
+                            value: province,
+                            child: Text(province),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) => setState(() {
+                      if (_province != value) {
+                        _province = value;
+                        _selectedDistrict = null;
+                        _legacyDistrictIssue = null;
+                      }
+                    }),
+                    validator: DistrictFormRules.validateProvince,
                   ),
-                ),
-                const SizedBox(height: 8),
-              ],
-              DropdownButtonFormField<String>(
-                key: ValueKey('district-dropdown-${_province ?? 'none'}'),
-                initialValue: _province == null ||
-                        !(NepalDistrictDirectory.districtsByProvince[
-                                _province] ??
-                            const <String>[])
-                            .contains(_selectedDistrict)
-                    ? null
-                    : _selectedDistrict,
-                decoration: const InputDecoration(
-                  labelText: 'District name',
-                  prefixIcon: Icon(Icons.location_on, color: purple),
-                  border: OutlineInputBorder(),
-                ),
-                hint: const Text('Select a district'),
-                items: (NepalDistrictDirectory.districtsByProvince[_province] ??
-                        const <String>[])
-                    .map((district) => DropdownMenuItem(
-                          value: district,
-                          child: Text(district),
-                        ))
-                    .toList(),
-                onChanged: _province == null
-                    ? null
-                    : (value) => setState(() {
-                          _selectedDistrict = value;
-                          _legacyDistrictIssue = null;
-                        }),
-                validator: (value) =>
-                    DistrictFormRules.validateDistrict(value, _province),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                key: const Key('district-description-field'),
-                controller: _descriptionController,
-                minLines: 3,
-                maxLines: 5,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  labelText: 'Description',
-                  alignLabelWithHint: true,
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) => DistrictFormRules.validateRequiredText(
-                  value,
-                  'Description',
-                ),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'Experience types',
-                style: TextStyle(
-                  color: maroon,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Choose one or more categories.',
-                style: TextStyle(color: Colors.black54),
-              ),
-              const SizedBox(height: 8),
-              FormField<List<String>>(
-                key: const Key('district-experience-types-field'),
-                initialValue: _experienceTypes,
-                validator: (values) => DistrictFormRules
-                    .validateExperienceTypes(values ?? const []),
-                builder: (field) => Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 4,
-                      children: DistrictFormRules.experienceCategories
-                          .map((category) => FilterChip(
-                                label: Text(category),
-                                selected: _experienceTypes.contains(category),
-                                onSelected: (selected) {
-                                  setState(() {
-                                    if (selected) {
-                                      _experienceTypes.add(category);
-                                    } else {
-                                      _experienceTypes.remove(category);
-                                    }
-                                  });
+                  const SizedBox(height: 16),
+                  if (_legacyDistrictIssue != null) ...[
+                    Text(
+                      _legacyDistrictIssue!,
+                      key: const Key('district-legacy-warning'),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  DropdownButtonFormField<String>(
+                    key: ValueKey('district-dropdown-${_province ?? 'none'}'),
+                    initialValue:
+                        _province == null ||
+                            !(NepalDistrictDirectory
+                                        .districtsByProvince[_province] ??
+                                    const <String>[])
+                                .contains(_selectedDistrict)
+                        ? null
+                        : _selectedDistrict,
+                    decoration: const InputDecoration(
+                      labelText: 'District name',
+                      prefixIcon: Icon(Icons.location_on, color: purple),
+                      border: OutlineInputBorder(),
+                    ),
+                    hint: const Text('Select a district'),
+                    items:
+                        (NepalDistrictDirectory
+                                    .districtsByProvince[_province] ??
+                                const <String>[])
+                            .map(
+                              (district) => DropdownMenuItem(
+                                value: district,
+                                child: Text(district),
+                              ),
+                            )
+                            .toList(),
+                    onChanged: _province == null
+                        ? null
+                        : (value) => setState(() {
+                            _selectedDistrict = value;
+                            _legacyDistrictIssue = null;
+                          }),
+                    validator: (value) =>
+                        DistrictFormRules.validateDistrict(value, _province),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    key: const Key('district-description-field'),
+                    controller: _descriptionController,
+                    minLines: 3,
+                    maxLines: 5,
+                    textCapitalization: TextCapitalization.sentences,
+                    decoration: const InputDecoration(
+                      labelText: 'Description',
+                      alignLabelWithHint: true,
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (value) =>
+                        DistrictFormRules.validateRequiredText(
+                          value,
+                          'Description',
+                        ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Experience types',
+                    style: TextStyle(
+                      color: maroon,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Choose one or more categories.',
+                    style: TextStyle(color: Colors.black54),
+                  ),
+                  const SizedBox(height: 8),
+                  FormField<List<String>>(
+                    key: const Key('district-experience-types-field'),
+                    initialValue: _experienceTypes,
+                    validator: (values) =>
+                        DistrictFormRules.validateExperienceTypes(
+                          values ?? const [],
+                        ),
+                    builder: (field) => Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          children: DistrictFormRules.experienceCategories
+                              .map(
+                                (category) => FilterChip(
+                                  label: Text(category),
+                                  selected: _experienceTypes.contains(category),
+                                  onSelected: (selected) {
+                                    setState(() {
+                                      if (selected) {
+                                        _experienceTypes.add(category);
+                                      } else {
+                                        _experienceTypes.remove(category);
+                                      }
+                                    });
+                                    field.didChange(_experienceTypes);
+                                  },
+                                  selectedColor: const Color(0xFFF1DCE4),
+                                  checkmarkColor: maroon,
+                                ),
+                              )
+                              .toList(),
+                        ),
+                        // Legacy unsupported selections remain visible so an
+                        // editor can remove them instead of silently losing data.
+                        ..._experienceTypes
+                            .where(
+                              (value) => !DistrictFormRules.experienceCategories
+                                  .contains(value),
+                            )
+                            .map(
+                              (value) => InputChip(
+                                label: Text('Unsupported: $value'),
+                                onDeleted: () {
+                                  setState(
+                                    () => _experienceTypes.remove(value),
+                                  );
                                   field.didChange(_experienceTypes);
                                 },
-                                selectedColor: const Color(0xFFF1DCE4),
-                                checkmarkColor: maroon,
-                              ))
-                          .toList(),
-                    ),
-                    // Legacy unsupported selections remain visible so an
-                    // editor can remove them instead of silently losing data.
-                    ..._experienceTypes
-                        .where((value) => !DistrictFormRules
-                            .experienceCategories
-                            .contains(value))
-                        .map((value) => InputChip(
-                              label: Text('Unsupported: $value'),
-                              onDeleted: () {
-                                setState(() => _experienceTypes.remove(value));
-                                field.didChange(_experienceTypes);
-                              },
-                            )),
-                    if (field.errorText != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8, left: 12),
-                        child: Text(
-                          field.errorText!,
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.error,
-                            fontSize: 12,
+                              ),
+                            ),
+                        if (field.errorText != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8, left: 12),
+                            child: Text(
+                              field.errorText!,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                                fontSize: 12,
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'This form only previews the district. Saving to the database '
-                'is disabled until admin access and security rules are ready.',
-                style: TextStyle(color: Colors.black54, fontSize: 13),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                key: const Key('district-preview-button'),
-                onPressed: _submit,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: maroon,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                child: const Text('Preview District'),
-              ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    widget.previewOnly
+                        ? 'This form only previews the district. Saving to '
+                              'Firestore is disabled in the current app runtime.'
+                        : 'This form submits through the injected district '
+                              'service.',
+                    style: TextStyle(color: Colors.black54, fontSize: 13),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    key: const Key('district-preview-button'),
+                    onPressed: _submit,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: maroon,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: Text(widget.submitLabel),
+                  ),
                 ],
               ),
             ),
