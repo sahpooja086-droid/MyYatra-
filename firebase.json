@@ -1,0 +1,1 @@
+{"firestore":{"rules":"firestore.rules"},"flutter":{"platforms":{"android":{"default":{"projectId":"myyatra-e873c","appId":"1:590072048751:android:8bb46be428098492b4b19a","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"myyatra-e873c","configurations":{"android":"1:590072048751:android:8bb46be428098492b4b19a"}}}}}}

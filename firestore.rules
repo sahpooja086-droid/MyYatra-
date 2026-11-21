@@ -1,0 +1,148 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAdmin() {
+      return request.auth != null && request.auth.token.admin == true;
+    }
+
+    function canonicalDistricts() {
+      return {
+        'Bhojpur': {'id': 'bhojpur', 'province': 'Koshi'},
+        'Dhankuta': {'id': 'dhankuta', 'province': 'Koshi'},
+        'Ilam': {'id': 'ilam', 'province': 'Koshi'},
+        'Jhapa': {'id': 'jhapa', 'province': 'Koshi'},
+        'Khotang': {'id': 'khotang', 'province': 'Koshi'},
+        'Morang': {'id': 'morang', 'province': 'Koshi'},
+        'Okhaldhunga': {'id': 'okhaldhunga', 'province': 'Koshi'},
+        'Panchthar': {'id': 'panchthar', 'province': 'Koshi'},
+        'Sankhuwasabha': {'id': 'sankhuwasabha', 'province': 'Koshi'},
+        'Solukhumbu': {'id': 'solukhumbu', 'province': 'Koshi'},
+        'Sunsari': {'id': 'sunsari', 'province': 'Koshi'},
+        'Taplejung': {'id': 'taplejung', 'province': 'Koshi'},
+        'Terhathum': {'id': 'terhathum', 'province': 'Koshi'},
+        'Udayapur': {'id': 'udayapur', 'province': 'Koshi'},
+        'Bara': {'id': 'bara', 'province': 'Madhesh'},
+        'Dhanusha': {'id': 'dhanusha', 'province': 'Madhesh'},
+        'Mahottari': {'id': 'mahottari', 'province': 'Madhesh'},
+        'Parsa': {'id': 'parsa', 'province': 'Madhesh'},
+        'Rautahat': {'id': 'rautahat', 'province': 'Madhesh'},
+        'Saptari': {'id': 'saptari', 'province': 'Madhesh'},
+        'Sarlahi': {'id': 'sarlahi', 'province': 'Madhesh'},
+        'Siraha': {'id': 'siraha', 'province': 'Madhesh'},
+        'Bhaktapur': {'id': 'bhaktapur', 'province': 'Bagmati'},
+        'Chitwan': {'id': 'chitwan', 'province': 'Bagmati'},
+        'Dhading': {'id': 'dhading', 'province': 'Bagmati'},
+        'Dolakha': {'id': 'dolakha', 'province': 'Bagmati'},
+        'Kathmandu': {'id': 'kathmandu', 'province': 'Bagmati'},
+        'Kavrepalanchok': {'id': 'kavrepalanchok', 'province': 'Bagmati'},
+        'Lalitpur': {'id': 'lalitpur', 'province': 'Bagmati'},
+        'Makwanpur': {'id': 'makwanpur', 'province': 'Bagmati'},
+        'Nuwakot': {'id': 'nuwakot', 'province': 'Bagmati'},
+        'Ramechhap': {'id': 'ramechhap', 'province': 'Bagmati'},
+        'Rasuwa': {'id': 'rasuwa', 'province': 'Bagmati'},
+        'Sindhuli': {'id': 'sindhuli', 'province': 'Bagmati'},
+        'Sindhupalchok': {'id': 'sindhupalchok', 'province': 'Bagmati'},
+        'Baglung': {'id': 'baglung', 'province': 'Gandaki'},
+        'Gorkha': {'id': 'gorkha', 'province': 'Gandaki'},
+        'Kaski': {'id': 'kaski', 'province': 'Gandaki'},
+        'Lamjung': {'id': 'lamjung', 'province': 'Gandaki'},
+        'Manang': {'id': 'manang', 'province': 'Gandaki'},
+        'Mustang': {'id': 'mustang', 'province': 'Gandaki'},
+        'Myagdi': {'id': 'myagdi', 'province': 'Gandaki'},
+        'Nawalpur': {'id': 'nawalparasi-east', 'province': 'Gandaki'},
+        'Parbat': {'id': 'parbat', 'province': 'Gandaki'},
+        'Syangja': {'id': 'syangja', 'province': 'Gandaki'},
+        'Tanahun': {'id': 'tanahun', 'province': 'Gandaki'},
+        'Arghakhanchi': {'id': 'arghakhanchi', 'province': 'Lumbini'},
+        'Banke': {'id': 'banke', 'province': 'Lumbini'},
+        'Bardiya': {'id': 'bardiya', 'province': 'Lumbini'},
+        'Dang': {'id': 'dang', 'province': 'Lumbini'},
+        'Gulmi': {'id': 'gulmi', 'province': 'Lumbini'},
+        'Kapilvastu': {'id': 'kapilvastu', 'province': 'Lumbini'},
+        'Parasi': {'id': 'nawalparasi-west', 'province': 'Lumbini'},
+        'Palpa': {'id': 'palpa', 'province': 'Lumbini'},
+        'Pyuthan': {'id': 'pyuthan', 'province': 'Lumbini'},
+        'Rolpa': {'id': 'rolpa', 'province': 'Lumbini'},
+        'Rukum East': {'id': 'rukum-east', 'province': 'Lumbini'},
+        'Rupandehi': {'id': 'rupandehi', 'province': 'Lumbini'},
+        'Dailekh': {'id': 'dailekh', 'province': 'Karnali'},
+        'Dolpa': {'id': 'dolpa', 'province': 'Karnali'},
+        'Humla': {'id': 'humla', 'province': 'Karnali'},
+        'Jajarkot': {'id': 'jajarkot', 'province': 'Karnali'},
+        'Jumla': {'id': 'jumla', 'province': 'Karnali'},
+        'Kalikot': {'id': 'kalikot', 'province': 'Karnali'},
+        'Mugu': {'id': 'mugu', 'province': 'Karnali'},
+        'Rukum West': {'id': 'rukum-west', 'province': 'Karnali'},
+        'Salyan': {'id': 'salyan', 'province': 'Karnali'},
+        'Surkhet': {'id': 'surkhet', 'province': 'Karnali'},
+        'Achham': {'id': 'achham', 'province': 'Sudurpashchim'},
+        'Baitadi': {'id': 'baitadi', 'province': 'Sudurpashchim'},
+        'Bajhang': {'id': 'bajhang', 'province': 'Sudurpashchim'},
+        'Bajura': {'id': 'bajura', 'province': 'Sudurpashchim'},
+        'Dadeldhura': {'id': 'dadeldhura', 'province': 'Sudurpashchim'},
+        'Darchula': {'id': 'darchula', 'province': 'Sudurpashchim'},
+        'Doti': {'id': 'doti', 'province': 'Sudurpashchim'},
+        'Kailali': {'id': 'kailali', 'province': 'Sudurpashchim'},
+        'Kanchanpur': {'id': 'kanchanpur', 'province': 'Sudurpashchim'}
+      };
+    }
+
+    // Perform the 77-entry lookup once per authorized write. Keeping identity
+    // validation in this single helper avoids repeatedly evaluating the large
+    // canonical map against Firestore's rules expression budget.
+    function isCanonicalDistrict(districtId, data) {
+      let expected = canonicalDistricts().get(data.get('name', ''), {});
+      return expected.keys().hasAll(['id', 'province'])
+        && expected.get('id', '') == districtId
+        && expected.get('province', '') == data.get('province', '');
+    }
+
+    function validDistrictData(data) {
+      return data.keys().hasOnly([
+          'name', 'province', 'description', 'experienceTypes', 'updatedAt'
+        ])
+        && data.keys().hasAll([
+          'name', 'province', 'description', 'experienceTypes', 'updatedAt'
+        ])
+        && data.name is string
+        && data.province is string
+        && data.description is string
+        && data.description.size() > 0
+        && data.description.size() <= 2000
+        && data.description.matches('.*\\S.*')
+        && data.experienceTypes is list
+        && data.experienceTypes.size() > 0
+        && data.experienceTypes.size() <= 6
+        && data.experienceTypes.hasOnly([
+          'Nature', 'Adventure', 'Culture', 'History', 'Food', 'Photography'
+        ])
+        && data.experienceTypes.toSet().size() == data.experienceTypes.size()
+        && data.updatedAt is timestamp;
+    }
+
+    match /districts/{districtId} {
+      // District documents contain public travel information only. Firestore
+      // rules cannot redact individual fields from a returned document.
+      allow read: if true;
+
+      allow create: if isAdmin()
+        && validDistrictData(request.resource.data)
+        && isCanonicalDistrict(districtId, request.resource.data);
+
+      // Keep the document ID and canonical district identity unchanged.
+      allow update: if isAdmin()
+        && validDistrictData(request.resource.data)
+        && isCanonicalDistrict(districtId, request.resource.data)
+        && request.resource.data.name == resource.data.name
+        && request.resource.data.province == resource.data.province;
+
+      allow delete: if isAdmin();
+    }
+
+    // No rules are granted for any other collection or document.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
