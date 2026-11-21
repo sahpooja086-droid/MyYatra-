@@ -1,44 +1,105 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../../controllers/district_management_controller.dart';
 import '../../data/nepal_district_directory.dart';
 import '../../models/district_model.dart';
+import '../../services/district_data_validator.dart';
+import '../../services/district_mutation_service.dart';
 import '../../services/district_service.dart';
 import 'district_form_screen.dart';
 
 class DistrictManagementScreen extends StatefulWidget {
-  const DistrictManagementScreen({super.key, this.districtsStream});
+  const DistrictManagementScreen({
+    super.key,
+    this.districtsStream,
+    this.districtsStreamFactory,
+    this.mutationService,
+    this.isAdministrator = false,
+  });
 
   /// Optional stream for UI tests; production uses [DistrictService].
   final Stream<List<DistrictModel>>? districtsStream;
+
+  /// Optional factory allows injected streams to be recreated when retried.
+  final Stream<List<DistrictModel>> Function()? districtsStreamFactory;
+
+  /// Optional mutation service for isolated test or explicitly enabled builds.
+  /// The production [AuthGate] does not provide a write service.
+  final DistrictMutationService? mutationService;
+  final bool isAdministrator;
 
   @override
   State<DistrictManagementScreen> createState() =>
       _DistrictManagementScreenState();
 }
 
-class _DistrictManagementScreenState
-    extends State<DistrictManagementScreen> {
+class _DistrictManagementScreenState extends State<DistrictManagementScreen> {
   static const Color maroon = Color(0xFF8E2442);
   static const Color purple = Color(0xFFA482B7);
   static const Color cream = Color(0xFFFFF9E9);
   static const String allProvincesLabel = 'All Provinces';
 
   late Stream<List<DistrictModel>> _districtsStream;
+  DistrictManagementController? _controller;
   final TextEditingController _searchController = TextEditingController();
   String _selectedProvince = allProvincesLabel;
 
   @override
   void initState() {
     super.initState();
-    _districtsStream =
-        widget.districtsStream ?? DistrictService().getDistricts();
+    if (widget.isAdministrator) {
+      _districtsStream = _createDistrictsStream();
+    }
+    _configureController();
+  }
+
+  @override
+  void didUpdateWidget(covariant DistrictManagementScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isAdministrator &&
+        (!oldWidget.isAdministrator ||
+            oldWidget.districtsStream != widget.districtsStream ||
+            oldWidget.districtsStreamFactory !=
+                widget.districtsStreamFactory)) {
+      _districtsStream = _createDistrictsStream();
+    }
+    if (oldWidget.isAdministrator != widget.isAdministrator ||
+        oldWidget.mutationService != widget.mutationService) {
+      _configureController();
+    }
+  }
+
+  Stream<List<DistrictModel>> _createDistrictsStream() {
+    return widget.districtsStreamFactory?.call() ??
+        widget.districtsStream ??
+        DistrictService().getDistricts();
+  }
+
+  void _configureController() {
+    _controller?.removeListener(_onControllerChanged);
+    _controller?.dispose();
+    _controller = null;
+
+    final mutationService = widget.mutationService;
+    if (widget.isAdministrator && mutationService != null) {
+      _controller = DistrictManagementController(
+        isAdministrator: true,
+        service: mutationService,
+      )..addListener(_onControllerChanged);
+    }
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _controller?.removeListener(_onControllerChanged);
+    _controller?.dispose();
     super.dispose();
+  }
+
+  void _onControllerChanged() {
+    if (mounted) setState(() {});
   }
 
   List<DistrictModel> _filterDistricts(List<DistrictModel> districts) {
@@ -49,34 +110,103 @@ class _DistrictManagementScreenState
       final name = district.name.trim().toLowerCase();
       final province = district.province.trim().toLowerCase();
       final matchesName = query.isEmpty || name.contains(query);
-      final matchesProvince = _selectedProvince == allProvincesLabel ||
-          province == provinceFilter;
+      final matchesProvince =
+          _selectedProvince == allProvincesLabel || province == provinceFilter;
       return matchesName && matchesProvince;
     }).toList();
   }
 
   void _retryLoadingDistricts() {
     setState(() {
-      _districtsStream = DistrictService().getDistricts();
+      _districtsStream = _createDistrictsStream();
     });
   }
 
   Future<void> _openDistrictForm({DistrictModel? district}) async {
+    if (!widget.isAdministrator) return;
     final preview = await Navigator.of(context).push<DistrictModel>(
       MaterialPageRoute(
-        builder: (_) => DistrictFormScreen(district: district),
+        builder: (_) => DistrictFormScreen(
+          district: district,
+          previewOnly: widget.mutationService == null,
+          submitLabel: widget.mutationService == null
+              ? 'Preview District'
+              : district == null
+              ? 'Add District'
+              : 'Update District',
+        ),
       ),
     );
 
     if (!mounted || preview == null) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
+    final controller = _controller;
+    if (controller == null) {
+      try {
+        DistrictDataValidator.normalize(preview, isCreate: district == null);
+        _showMessage(
           'District data validated locally. It was NOT saved to Firestore.',
-        ),
+        );
+      } on DistrictValidationException catch (error) {
+        _showMessage(error.message);
+      }
+      return;
+    }
+
+    final saved = district == null
+        ? await controller.addDistrict(preview)
+        : await controller.updateDistrict(preview);
+    if (!mounted) return;
+    _showMessage(controller.message ?? 'District operation failed.', saved);
+  }
+
+  void _showMessage(String message, [bool isSuccess = false]) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isSuccess ? Colors.green.shade700 : null,
       ),
     );
+  }
+
+  Future<void> _confirmDelete(DistrictModel district) async {
+    if (!widget.isAdministrator) return;
+    final hasMutationService = _controller != null;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(
+          hasMutationService ? 'Delete district?' : 'Preview district deletion',
+        ),
+        content: Text(
+          hasMutationService
+              ? 'Delete ${district.name} from the supplied district service? '
+                    'This cannot be undone.'
+              : 'This is a preview only. No Firestore data will be deleted.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(hasMutationService ? 'Delete' : 'Preview Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted || confirmed != true) return;
+    final controller = _controller;
+    if (controller == null) {
+      _showMessage('Delete was previewed. No data was deleted.');
+      return;
+    }
+
+    final deleted = await controller.deleteDistrict(district.id);
+    if (!mounted) return;
+    _showMessage(controller.message ?? 'District operation failed.', deleted);
   }
 
   Widget _buildDistrictList(
@@ -90,9 +220,9 @@ class _DistrictManagementScreenState
           child: Text(
             hasActiveFilters
                 ? 'No districts match your search or province filter. '
-                    'Try changing your search or selecting All Provinces.'
+                      'Try changing your search or selecting All Provinces.'
                 : 'No districts yet. District information will appear here '
-                    'once it has been added.',
+                      'once it has been added.',
             textAlign: TextAlign.center,
             style: const TextStyle(color: Colors.black54, fontSize: 16),
           ),
@@ -129,10 +259,28 @@ class _DistrictManagementScreenState
                   ? 'Province unavailable'
                   : '${district.province.trim()} Province',
             ),
-            trailing: IconButton(
-              tooltip: 'Preview district changes (not saved)',
-              icon: const Icon(Icons.edit, color: maroon),
-              onPressed: () => _openDistrictForm(district: district),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  tooltip: widget.mutationService == null
+                      ? 'Preview district changes (not saved)'
+                      : 'Edit district',
+                  icon: const Icon(Icons.edit, color: maroon),
+                  onPressed: _controller?.isLoading == true
+                      ? null
+                      : () => _openDistrictForm(district: district),
+                ),
+                IconButton(
+                  tooltip: widget.mutationService == null
+                      ? 'Preview delete (not saved)'
+                      : 'Delete district',
+                  icon: const Icon(Icons.delete_outline, color: maroon),
+                  onPressed: _controller?.isLoading == true
+                      ? null
+                      : () => _confirmDelete(district),
+                ),
+              ],
             ),
           ),
         );
@@ -173,15 +321,14 @@ class _DistrictManagementScreenState
         }
 
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(color: maroon),
-          );
+          return const Center(child: CircularProgressIndicator(color: maroon));
         }
 
         final allDistricts = snapshot.data ?? const <DistrictModel>[];
         return _buildDistrictList(
           _filterDistricts(allDistricts),
-          hasActiveFilters: _searchController.text.trim().isNotEmpty ||
+          hasActiveFilters:
+              _searchController.text.trim().isNotEmpty ||
               _selectedProvince != allProvincesLabel,
         );
       },
@@ -190,6 +337,18 @@ class _DistrictManagementScreenState
 
   @override
   Widget build(BuildContext context) {
+    if (!widget.isAdministrator) {
+      return const Scaffold(
+        backgroundColor: cream,
+        body: Center(
+          child: Text(
+            'Administrator authorization is required to manage districts.',
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: cream,
       appBar: AppBar(
@@ -210,12 +369,12 @@ class _DistrictManagementScreenState
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(20, 24, 20, 8),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
                   'Explore Nepal',
                   style: TextStyle(
                     fontSize: 26,
@@ -223,15 +382,19 @@ class _DistrictManagementScreenState
                     color: maroon,
                   ),
                 ),
-                SizedBox(height: 6),
-                Text(
+                const SizedBox(height: 6),
+                const Text(
                   'Manage district information',
                   style: TextStyle(color: Colors.black54),
                 ),
-                SizedBox(height: 6),
+                const SizedBox(height: 6),
                 Text(
-                  'Read-only: Add and Edit are previews; changes are not saved.',
-                  style: TextStyle(color: maroon, fontSize: 12),
+                  widget.mutationService == null
+                      ? 'Read-only: Add, Edit, and Delete are previews; '
+                            'changes are not saved to Firestore.'
+                      : 'Using the injected district service. Production '
+                            'Firestore writes remain disconnected.',
+                  style: const TextStyle(color: maroon, fontSize: 12),
                 ),
               ],
             ),
@@ -275,14 +438,13 @@ class _DistrictManagementScreenState
                 fillColor: Colors.white,
                 border: OutlineInputBorder(),
               ),
-              items: [
-                allProvincesLabel,
-                ...NepalDistrictDirectory.provinces,
-              ]
-                  .map((province) => DropdownMenuItem(
-                        value: province,
-                        child: Text(province),
-                      ))
+              items: [allProvincesLabel, ...NepalDistrictDirectory.provinces]
+                  .map(
+                    (province) => DropdownMenuItem(
+                      value: province,
+                      child: Text(province),
+                    ),
+                  )
                   .toList(),
               onChanged: (province) {
                 if (province == null) return;
@@ -290,11 +452,15 @@ class _DistrictManagementScreenState
               },
             ),
           ),
+          if (_controller?.isLoading == true)
+            const LinearProgressIndicator(color: maroon),
           Expanded(child: _buildDistrictStream()),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openDistrictForm(),
+        onPressed: _controller?.isLoading == true
+            ? null
+            : () => _openDistrictForm(),
         backgroundColor: maroon,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add),

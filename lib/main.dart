@@ -5,10 +5,10 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import 'firebase_options.dart';
-import 'services/admin_authorization_service.dart';
-import 'screens/auth/login_screen.dart';
-import 'screens/admin/district_management_screen.dart';
 import 'models/district_model.dart';
+import 'screens/admin/district_management_screen.dart';
+import 'screens/auth/login_screen.dart';
+import 'services/admin_authorization_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -182,6 +182,7 @@ class _AuthGateState extends State<AuthGate> {
       case _AuthGateView.administrator:
         return DistrictManagementScreen(
           districtsStream: widget.districtsStream,
+          isAdministrator: true,
         );
       case _AuthGateView.nonAdministrator:
         return _AuthorizationMessage(
