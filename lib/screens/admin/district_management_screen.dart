@@ -15,6 +15,7 @@ class DistrictManagementScreen extends StatefulWidget {
     this.districtsStream,
     this.districtsStreamFactory,
     this.mutationService,
+    this.signOut,
     this.isAdministrator = false,
   });
 
@@ -27,6 +28,7 @@ class DistrictManagementScreen extends StatefulWidget {
   /// Optional mutation service for isolated test or explicitly enabled builds.
   /// The production [AuthGate] does not provide a write service.
   final DistrictMutationService? mutationService;
+  final Future<void> Function()? signOut;
   final bool isAdministrator;
 
   @override
@@ -361,7 +363,8 @@ class _DistrictManagementScreenState extends State<DistrictManagementScreen> {
         actions: [
           IconButton(
             tooltip: 'Log out',
-            onPressed: () => FirebaseAuth.instance.signOut(),
+            onPressed:
+                widget.signOut ?? () => FirebaseAuth.instance.signOut(),
             icon: const Icon(Icons.logout),
           ),
         ],
