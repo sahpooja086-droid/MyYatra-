@@ -182,6 +182,7 @@ class _AuthGateState extends State<AuthGate> {
       case _AuthGateView.administrator:
         return DistrictManagementScreen(
           districtsStream: widget.districtsStream,
+          signOut: _signOut,
           isAdministrator: true,
         );
       case _AuthGateView.nonAdministrator:

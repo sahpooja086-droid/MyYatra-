@@ -72,6 +72,27 @@ void main() {
     expect(find.byKey(const Key('district-search-field')), findsOneWidget);
   });
 
+  testWidgets('admin logout uses the injected callback without Firebase', (
+    tester,
+  ) async {
+    var signOutCalled = false;
+    await tester.pumpWidget(
+      _app(
+        signedInChanges: Stream<bool>.value(true),
+        checker: _FakeAuthorizationChecker(result: true),
+        signOut: () async {
+          signOutCalled = true;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Log out'));
+    await tester.pumpAndSettle();
+
+    expect(signOutCalled, isTrue);
+  });
+
   testWidgets('hides district management controls from non-admin users', (
     tester,
   ) async {
@@ -130,13 +151,14 @@ void main() {
 Widget _app({
   required Stream<bool> signedInChanges,
   required AdminAuthorizationChecker checker,
+  Future<void> Function()? signOut,
 }) {
   return MaterialApp(
     home: AuthGate(
       signedInChanges: signedInChanges,
       authorizationChecker: checker,
       districtsStream: Stream<List<DistrictModel>>.value(const []),
-      signOut: () async {},
+      signOut: signOut ?? () async {},
     ),
   );
 }

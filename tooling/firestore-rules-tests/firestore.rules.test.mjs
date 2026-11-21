@@ -247,6 +247,20 @@ test('admin cannot update a legacy record with a non-canonical document ID',
   },
 );
 
+test('admin cannot delete a legacy record with a non-canonical document ID',
+  async () => {
+    // Legacy records stay readable and require a separate review process.
+    await seedDistrict('legacy-kaski-id', districtData('Kaski', 'Gandaki'));
+    const context = testEnvironment.authenticatedContext('admin-uid', {
+      admin: true,
+    });
+
+    await assertFails(
+      deleteDoc(doc(context.firestore(), 'districts', 'legacy-kaski-id')),
+    );
+  },
+);
+
 async function seedDistrict(id, data) {
   await testEnvironment.withSecurityRulesDisabled(async (context) => {
     await setDoc(doc(context.firestore(), 'districts', id), data);
