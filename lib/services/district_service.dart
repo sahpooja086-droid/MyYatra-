@@ -212,7 +212,31 @@ class DistrictService implements DistrictMutationService {
     if (id.trim().isEmpty) {
       throw const DistrictValidationException('District ID is required.');
     }
-    return _runFirestoreOperation('delete', () => _repository.delete(id));
+    return _runFirestoreOperation('delete', () async {
+      final existing = await _repository.getById(id);
+      if (existing == null) throw DistrictNotFoundException(id);
+
+      final canonical = NepalDistrictDirectory.byId(id);
+      if (canonical == null) {
+        throw DistrictLegacyRecordException(existing.name);
+      }
+      if (existing.name != canonical.name ||
+          existing.province != canonical.province) {
+        throw const DistrictValidationException(
+          'The existing district name or province does not match its '
+          'canonical document ID. No changes were made.',
+        );
+      }
+      DistrictDataValidator.normalize(existing, isCreate: false);
+      if (existing.updatedAt == null) {
+        throw const DistrictValidationException(
+          'The existing district record has no valid updated date. No '
+          'changes were made.',
+        );
+      }
+
+      await _repository.delete(id);
+    });
   }
 
   Future<T> _runFirestoreOperation<T>(

@@ -138,8 +138,10 @@ service cloud.firestore {
         && request.resource.data.province == resource.data.province;
 
       // Admins may delete only records with a canonical document ID and
-      // matching district identity. Legacy/malformed records need review.
+      // matching identity and valid district fields. Legacy/malformed records
+      // need review.
       allow delete: if isAdmin()
+        && validDistrictData(resource.data)
         && isCanonicalDistrict(districtId, resource.data);
     }
 

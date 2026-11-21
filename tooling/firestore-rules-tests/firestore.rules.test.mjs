@@ -12,6 +12,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   setDoc,
   Timestamp,
@@ -94,6 +95,13 @@ test('non-admin users cannot create, update, or delete districts', async () => {
       districtData('Kathmandu', 'Bagmati'),
     ),
   );
+  await assertFails(
+    updateDoc(doc(unauthenticated, 'districts', 'kaski'), {
+      description: 'Changed without authentication',
+      updatedAt: Timestamp.now(),
+    }),
+  );
+  await assertFails(deleteDoc(doc(unauthenticated, 'districts', 'kaski')));
 });
 
 test('admin can create, update, and delete a valid district', async () => {
@@ -103,19 +111,29 @@ test('admin can create, update, and delete a valid district', async () => {
   });
   const database = context.firestore();
 
+  const kathmanduReference = doc(database, 'districts', 'kathmandu');
   await assertSucceeds(
-    setDoc(
-      doc(database, 'districts', 'kathmandu'),
-      districtData('Kathmandu', 'Bagmati'),
-    ),
+    setDoc(kathmanduReference, districtData('Kathmandu', 'Bagmati')),
   );
+  const created = await assertSucceeds(getDoc(kathmanduReference));
+  assert.equal(created.data().name, 'Kathmandu');
+  assert.equal(created.data().province, 'Bagmati');
+
   await assertSucceeds(
     updateDoc(doc(database, 'districts', 'kaski'), {
       description: 'Updated by admin',
       updatedAt: Timestamp.now(),
     }),
   );
-  await assertSucceeds(deleteDoc(doc(database, 'districts', 'kaski')));
+  const updated = await assertSucceeds(
+    getDoc(doc(database, 'districts', 'kaski')),
+  );
+  assert.equal(updated.data().description, 'Updated by admin');
+
+  const kaskiReference = doc(database, 'districts', 'kaski');
+  await assertSucceeds(deleteDoc(kaskiReference));
+  const deleted = await assertSucceeds(getDoc(kaskiReference));
+  assert.equal(deleted.exists(), false);
 });
 
 test('admin can create canonical districts with special stable IDs', async () => {
@@ -149,6 +167,23 @@ test('admin can create canonical districts with special stable IDs', async () =>
     ),
   );
 });
+
+test('admin cannot create a second document for a canonical district name',
+  async () => {
+    const context = testEnvironment.authenticatedContext('admin-uid', {
+      admin: true,
+    });
+    const database = context.firestore();
+    await seedDistrict('kaski', districtData('Kaski', 'Gandaki'));
+
+    await assertFails(
+      setDoc(
+        doc(database, 'districts', 'another-kaski'),
+        districtData('Kaski', 'Gandaki'),
+      ),
+    );
+  },
+);
 
 test('admin cannot write invalid district, province, category, or extra fields',
   async () => {
@@ -192,6 +227,27 @@ test('admin cannot create a district with a whitespace-only description',
 
     await assertFails(
       setDoc(doc(context.firestore(), 'districts', 'kaski'), data),
+    );
+  },
+);
+
+test('admin cannot create districts missing required data or exceeding limits',
+  async () => {
+    const context = testEnvironment.authenticatedContext('admin-uid', {
+      admin: true,
+    });
+    const database = context.firestore();
+    const missingDescription = districtData('Kaski', 'Gandaki');
+    delete missingDescription.description;
+
+    await assertFails(
+      setDoc(doc(database, 'districts', 'kaski'), missingDescription),
+    );
+
+    const tooLongDescription = districtData('Kaski', 'Gandaki');
+    tooLongDescription.description = 'x'.repeat(2001);
+    await assertFails(
+      setDoc(doc(database, 'districts', 'kaski'), tooLongDescription),
     );
   },
 );
@@ -257,6 +313,21 @@ test('admin cannot delete a legacy record with a non-canonical document ID',
 
     await assertFails(
       deleteDoc(doc(context.firestore(), 'districts', 'legacy-kaski-id')),
+    );
+  },
+);
+
+test('admin cannot delete a malformed record at a canonical document ID',
+  async () => {
+    const malformed = districtData('Kaski', 'Gandaki');
+    malformed.description = '   ';
+    await seedDistrict('kaski', malformed);
+    const context = testEnvironment.authenticatedContext('admin-uid', {
+      admin: true,
+    });
+
+    await assertFails(
+      deleteDoc(doc(context.firestore(), 'districts', 'kaski')),
     );
   },
 );
