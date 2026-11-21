@@ -8,8 +8,8 @@ import 'package:myyatra/services/admin_authorization_service.dart';
 
 void main() {
   testWidgets('shows checking state while admin claim is being resolved', (
-    tester,
-  ) async {
+      tester,
+      ) async {
     final checker = _FakeAuthorizationChecker(pendingResult: Completer<bool>());
     await tester.pumpWidget(
       _app(signedInChanges: Stream<bool>.value(true), checker: checker),
@@ -32,14 +32,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Welcome to MyYatra'), findsOneWidget);
-    expect(find.text('Sign in to explore Nepal'), findsOneWidget);
+    expect(find.text('Welcome back.'), findsOneWidget);
+    expect(find.text('Sign in to continue your Nepal story.'), findsOneWidget);
     expect(find.byType(TextFormField), findsNWidgets(2));
   });
 
   testWidgets('returns to login after an authenticated user signs out', (
-    tester,
-  ) async {
+      tester,
+      ) async {
     final authEvents = StreamController<bool>.broadcast();
     await tester.pumpWidget(
       _app(
@@ -54,7 +54,7 @@ void main() {
 
     authEvents.add(false);
     await tester.pumpAndSettle();
-    expect(find.text('Welcome to MyYatra'), findsOneWidget);
+    expect(find.text('Welcome back.'), findsOneWidget);
     await authEvents.close();
   });
 
@@ -73,8 +73,8 @@ void main() {
   });
 
   testWidgets('admin logout uses the injected callback without Firebase', (
-    tester,
-  ) async {
+      tester,
+      ) async {
     var signOutCalled = false;
     await tester.pumpWidget(
       _app(
@@ -94,8 +94,8 @@ void main() {
   });
 
   testWidgets('hides district management controls from non-admin users', (
-    tester,
-  ) async {
+      tester,
+      ) async {
     await tester.pumpWidget(
       _app(
         signedInChanges: Stream<bool>.value(true),
@@ -112,8 +112,8 @@ void main() {
   });
 
   testWidgets('shows a retryable message when authorization check fails', (
-    tester,
-  ) async {
+      tester,
+      ) async {
     await tester.pumpWidget(
       _app(
         signedInChanges: Stream<bool>.value(true),
@@ -128,8 +128,8 @@ void main() {
   });
 
   testWidgets('refreshes the token before rechecking non-admin access', (
-    tester,
-  ) async {
+      tester,
+      ) async {
     final checker = _FakeAuthorizationChecker(
       result: false,
       refreshedResult: true,
