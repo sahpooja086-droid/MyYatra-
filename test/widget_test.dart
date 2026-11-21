@@ -5,6 +5,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:myyatra/main.dart';
 import 'package:myyatra/models/district_model.dart';
 import 'package:myyatra/services/admin_authorization_service.dart';
+import 'package:myyatra/services/district_mutation_service.dart';
+
+import 'support/fake_district_mutation_service.dart';
 
 void main() {
   testWidgets('shows checking state while admin claim is being resolved', (
@@ -72,6 +75,28 @@ void main() {
     expect(find.byKey(const Key('district-search-field')), findsOneWidget);
   });
 
+  testWidgets('authorized admin receives the injected mutation service', (
+    tester,
+  ) async {
+    final service = FakeDistrictMutationService([_kaski()]);
+    await tester.pumpWidget(
+      _app(
+        signedInChanges: Stream<bool>.value(true),
+        checker: _FakeAuthorizationChecker(result: true),
+        mutationService: service,
+        districts: [_kaski()],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Edit district'), findsOneWidget);
+    expect(find.byTooltip('Delete district'), findsOneWidget);
+    expect(
+      find.textContaining('Using the injected district service'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('admin logout uses the injected callback without Firebase', (
     tester,
   ) async {
@@ -96,10 +121,13 @@ void main() {
   testWidgets('hides district management controls from non-admin users', (
     tester,
   ) async {
+    final service = FakeDistrictMutationService([_kaski()]);
     await tester.pumpWidget(
       _app(
         signedInChanges: Stream<bool>.value(true),
         checker: _FakeAuthorizationChecker(result: false),
+        mutationService: service,
+        districts: [_kaski()],
       ),
     );
     await tester.pumpAndSettle();
@@ -109,6 +137,7 @@ void main() {
     expect(find.text('Add District'), findsNothing);
     expect(find.byKey(const Key('district-search-field')), findsNothing);
     expect(find.byTooltip('Log out'), findsOneWidget);
+    expect(service.addCalls + service.updateCalls + service.deleteCalls, 0);
   });
 
   testWidgets('shows a retryable message when authorization check fails', (
@@ -151,17 +180,28 @@ void main() {
 Widget _app({
   required Stream<bool> signedInChanges,
   required AdminAuthorizationChecker checker,
+  DistrictMutationService? mutationService,
+  List<DistrictModel> districts = const [],
   Future<void> Function()? signOut,
 }) {
   return MaterialApp(
     home: AuthGate(
       signedInChanges: signedInChanges,
       authorizationChecker: checker,
-      districtsStream: Stream<List<DistrictModel>>.value(const []),
+      districtsStream: Stream<List<DistrictModel>>.value(districts),
+      districtMutationService: mutationService,
       signOut: signOut ?? () async {},
     ),
   );
 }
+
+DistrictModel _kaski() => DistrictModel(
+  id: 'kaski',
+  name: 'Kaski',
+  province: 'Gandaki',
+  description: 'Lake district',
+  experienceTypes: const ['Nature'],
+);
 
 class _FakeAuthorizationChecker implements AdminAuthorizationChecker {
   _FakeAuthorizationChecker({

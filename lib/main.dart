@@ -1,25 +1,134 @@
 import 'dart:async';
+import 'dart:io';
 
-import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 
 import 'firebase_options.dart';
 import 'models/district_model.dart';
 import 'screens/admin/district_management_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'services/admin_authorization_service.dart';
+import 'services/district_mutation_service.dart';
+import 'services/district_service.dart';
+
+const bool _enableEmulatorDistrictCrud = bool.fromEnvironment(
+  'MYYATRA_ENABLE_EMULATOR_DISTRICT_CRUD',
+  defaultValue: false,
+);
+const String _firestoreEmulatorHost = String.fromEnvironment(
+  'MYYATRA_FIRESTORE_EMULATOR_HOST',
+  defaultValue: '10.0.2.2',
+);
+const String _emulatorProjectId = 'demo-myyatra';
+const FirebaseOptions _emulatorFirebaseOptions = FirebaseOptions(
+  apiKey: 'demo-api-key',
+  appId: '1:123456789012:android:0123456789abcdef',
+  messagingSenderId: '123456789012',
+  projectId: _emulatorProjectId,
+);
 
 Future<void> main() async {
+  if (_enableEmulatorDistrictCrud && !kDebugMode) {
+    throw StateError(
+      'Emulator district CRUD is available only in debug builds.',
+    );
+  }
+  if (_enableEmulatorDistrictCrud &&
+      !const {
+        '10.0.2.2',
+        '127.0.0.1',
+        'localhost',
+        '::1',
+      }.contains(_firestoreEmulatorHost)) {
+    throw StateError(
+      'District CRUD may connect only to a local Firestore Emulator host.',
+    );
+  }
+
   WidgetsFlutterBinding.ensureInitialized();
 
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  if (_enableEmulatorDistrictCrud) {
+    await _verifyEmulatorsReachable();
+  }
 
-  runApp(const MyApp());
+  FirebaseAuth? firebaseAuth;
+  DistrictService? districtService;
+  DistrictMutationService? districtMutationService;
+  if (_enableEmulatorDistrictCrud) {
+    final firebaseApp = await Firebase.initializeApp(
+      name: 'myyatra-demo-emulator',
+      options: _emulatorFirebaseOptions,
+    );
+    if (firebaseApp.options.projectId != _emulatorProjectId) {
+      throw StateError('Emulator mode must use project $_emulatorProjectId.');
+    }
+
+    final auth = FirebaseAuth.instanceFor(app: firebaseApp);
+    await auth.useAuthEmulator(_firestoreEmulatorHost, 9099);
+    firebaseAuth = auth;
+
+    final firestore = FirebaseFirestore.instanceFor(app: firebaseApp);
+    firestore.useFirestoreEmulator(_firestoreEmulatorHost, 8080);
+    districtService = DistrictService(
+      repository: FirestoreDistrictRepository(firestore: firestore),
+    );
+    districtMutationService = districtService;
+  } else {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  }
+
+  runApp(
+    MyApp(
+      firebaseAuth: firebaseAuth,
+      districtsStreamFactory: districtService?.getDistricts,
+      districtMutationService: districtMutationService,
+    ),
+  );
+}
+
+Future<void> _verifyEmulatorsReachable() async {
+  for (final port in [9099, 8080]) {
+    Socket? socket;
+    try {
+      socket = await Socket.connect(
+        _firestoreEmulatorHost,
+        port,
+        timeout: const Duration(seconds: 3),
+      );
+    } on SocketException catch (error) {
+      throw StateError(
+        'The demo Firebase Emulator on port $port is unavailable. Start '
+        'both Auth and Firestore emulators before launching emulator mode. '
+        'Details: $error',
+      );
+    } on TimeoutException catch (error) {
+      throw StateError(
+        'Timed out checking the demo Firebase Emulator on port $port. '
+        'No production fallback is available. Details: $error',
+      );
+    } finally {
+      socket?.destroy();
+    }
+  }
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  const MyApp({
+    super.key,
+    this.firebaseAuth,
+    this.districtsStreamFactory,
+    this.districtMutationService,
+  });
+
+  final FirebaseAuth? firebaseAuth;
+  final Stream<List<DistrictModel>> Function()? districtsStreamFactory;
+  final DistrictMutationService? districtMutationService;
 
   @override
   Widget build(BuildContext context) {
@@ -30,7 +139,11 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF8E2442)),
         useMaterial3: true,
       ),
-      home: const AuthGate(),
+      home: AuthGate(
+        firebaseAuth: firebaseAuth,
+        districtsStreamFactory: districtsStreamFactory,
+        districtMutationService: districtMutationService,
+      ),
     );
   }
 }
@@ -50,6 +163,9 @@ class AuthGate extends StatefulWidget {
     this.signedInChanges,
     this.authorizationChecker,
     this.districtsStream,
+    this.districtsStreamFactory,
+    this.firebaseAuth,
+    this.districtMutationService,
     this.signOut,
   });
 
@@ -58,6 +174,9 @@ class AuthGate extends StatefulWidget {
   final Stream<bool>? signedInChanges;
   final AdminAuthorizationChecker? authorizationChecker;
   final Stream<List<DistrictModel>>? districtsStream;
+  final Stream<List<DistrictModel>> Function()? districtsStreamFactory;
+  final FirebaseAuth? firebaseAuth;
+  final DistrictMutationService? districtMutationService;
   final Future<void> Function()? signOut;
 
   @override
@@ -79,7 +198,9 @@ class _AuthGateState extends State<AuthGate> {
     super.initState();
     _signedInChanges =
         widget.signedInChanges ??
-        FirebaseAuth.instance.idTokenChanges().map((user) => user != null);
+        (widget.firebaseAuth ?? FirebaseAuth.instance)
+            .idTokenChanges()
+            .map((user) => user != null);
     _listenForAuthentication();
   }
 
@@ -118,7 +239,8 @@ class _AuthGateState extends State<AuthGate> {
     setState(() => _view = _AuthGateView.checkingAuthorization);
     try {
       final checker =
-          widget.authorizationChecker ?? AdminAuthorizationService();
+          widget.authorizationChecker ??
+          AdminAuthorizationService(auth: widget.firebaseAuth);
       final isAdministrator = await checker.isCurrentUserAdmin(
         forceRefresh: forceRefresh,
       );
@@ -148,7 +270,7 @@ class _AuthGateState extends State<AuthGate> {
       if (widget.signOut != null) {
         await widget.signOut!();
       } else {
-        await FirebaseAuth.instance.signOut();
+        await (widget.firebaseAuth ?? FirebaseAuth.instance).signOut();
       }
     } catch (_) {
       if (!mounted) return;
@@ -178,10 +300,12 @@ class _AuthGateState extends State<AuthGate> {
           ),
         );
       case _AuthGateView.signedOut:
-        return const LoginScreen();
+        return LoginScreen(auth: widget.firebaseAuth);
       case _AuthGateView.administrator:
         return DistrictManagementScreen(
           districtsStream: widget.districtsStream,
+          districtsStreamFactory: widget.districtsStreamFactory,
+          mutationService: widget.districtMutationService,
           signOut: _signOut,
           isAdministrator: true,
         );
