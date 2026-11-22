@@ -5,7 +5,11 @@ import 'auth_widgets.dart';
 import 'forgot_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  const LoginScreen({super.key, this.notice});
+
+  /// Optional message shown above the form, for example
+  /// "You were signed out because you were inactive."
+  final String? notice;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -116,6 +120,10 @@ class _LoginScreenState extends State<LoginScreen> {
                         fontSize: 16,
                       ),
                     ),
+                    if (widget.notice != null) ...[
+                      const SizedBox(height: 20),
+                      AuthInfoBanner(message: widget.notice!),
+                    ],
                     const SizedBox(height: 28),
                     const AuthFieldLabel('Email address'),
                     TextFormField(
