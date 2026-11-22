@@ -191,6 +191,45 @@ class AuthErrorBanner extends StatelessWidget {
   }
 }
 
+/// Soft purple box used for friendly, non-error notices.
+class AuthInfoBanner extends StatelessWidget {
+  const AuthInfoBanner({super.key, required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF4EDF8),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFDCCBE6)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.info_outline, color: AuthPalette.purple, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  color: AuthPalette.ink,
+                  fontSize: 14,
+                  height: 1.3,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// Full-width maroon button with an optional arrow and a loading spinner.
 class AuthPrimaryButton extends StatelessWidget {
   const AuthPrimaryButton({
@@ -226,29 +265,29 @@ class AuthPrimaryButton extends StatelessWidget {
         ),
         child: isLoading
             ? const SizedBox(
-                height: 22,
-                width: 22,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.4,
-                  color: Colors.white,
-                ),
-              )
+          height: 22,
+          width: 22,
+          child: CircularProgressIndicator(
+            strokeWidth: 2.4,
+            color: Colors.white,
+          ),
+        )
             : Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    label,
-                    style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  if (trailingIcon != null) ...[
-                    const SizedBox(width: 10),
-                    Icon(trailingIcon, size: 20),
-                  ],
-                ],
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
               ),
+            ),
+            if (trailingIcon != null) ...[
+              const SizedBox(width: 10),
+              Icon(trailingIcon, size: 20),
+            ],
+          ],
+        ),
       ),
     );
   }

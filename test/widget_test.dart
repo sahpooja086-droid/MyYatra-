@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:myyatra/main.dart';
 import 'package:myyatra/models/district_model.dart';
+import 'package:myyatra/screens/auth/idle_timeout_gate.dart';
 import 'package:myyatra/services/admin_authorization_service.dart';
 
 void main() {
@@ -104,11 +105,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Administrator access required'), findsOneWidget);
+    expect(find.text('Welcome to MyYatra'), findsOneWidget);
     expect(find.text('Manage Districts'), findsNothing);
     expect(find.text('Add District'), findsNothing);
     expect(find.byKey(const Key('district-search-field')), findsNothing);
-    expect(find.byTooltip('Log out'), findsOneWidget);
+    expect(find.text('Sign out'), findsOneWidget);
   });
 
   testWidgets('shows a retryable message when authorization check fails', (
@@ -127,31 +128,169 @@ void main() {
     expect(find.text('Manage Districts'), findsNothing);
   });
 
-  testWidgets('refreshes the token before rechecking non-admin access', (
+  testWidgets('non-admin users land on the dashboard and can sign out', (
       tester,
       ) async {
-    final checker = _FakeAuthorizationChecker(
-      result: false,
-      refreshedResult: true,
-    );
+    var signOutCalled = false;
     await tester.pumpWidget(
-      _app(signedInChanges: Stream<bool>.value(true), checker: checker),
+      _app(
+        signedInChanges: Stream<bool>.value(true),
+        checker: _FakeAuthorizationChecker(result: false),
+        signOut: () async {
+          signOutCalled = true;
+        },
+      ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Administrator access required'), findsOneWidget);
-    await tester.tap(find.text('Refresh authorization'));
+    expect(find.text('Dashboard'), findsOneWidget);
+    await tester.tap(find.text('Sign out'));
     await tester.pumpAndSettle();
 
-    expect(checker.refreshRequested, isTrue);
-    expect(find.text('Manage Districts'), findsOneWidget);
+    expect(signOutCalled, isTrue);
   });
+
+  testWidgets('signs a regular user out after being idle and says why', (
+      tester,
+      ) async {
+    final authEvents = StreamController<bool>.broadcast();
+    await tester.pumpWidget(
+      _app(
+        signedInChanges: authEvents.stream,
+        checker: _FakeAuthorizationChecker(result: false),
+        signOut: () async => authEvents.add(false),
+        idleTimeout: const Duration(seconds: 30),
+      ),
+    );
+    authEvents.add(true);
+    await tester.pumpAndSettle();
+    expect(find.text('Welcome to MyYatra'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 31));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Welcome back.'), findsOneWidget);
+    expect(find.textContaining('inactive'), findsOneWidget);
+    expect(find.text('Welcome to MyYatra'), findsNothing);
+    await authEvents.close();
+  });
+
+  testWidgets('signs an administrator out after being idle', (tester) async {
+    final authEvents = StreamController<bool>.broadcast();
+    await tester.pumpWidget(
+      _app(
+        signedInChanges: authEvents.stream,
+        checker: _FakeAuthorizationChecker(result: true),
+        signOut: () async => authEvents.add(false),
+        idleTimeout: const Duration(seconds: 30),
+      ),
+    );
+    authEvents.add(true);
+    await tester.pumpAndSettle();
+    expect(find.text('Manage Districts'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 31));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Welcome back.'), findsOneWidget);
+    expect(find.text('Manage Districts'), findsNothing);
+    await authEvents.close();
+  });
+
+  testWidgets('a manual sign out does not show the inactivity notice', (
+      tester,
+      ) async {
+    final authEvents = StreamController<bool>.broadcast();
+    await tester.pumpWidget(
+      _app(
+        signedInChanges: authEvents.stream,
+        checker: _FakeAuthorizationChecker(result: false),
+        signOut: () async => authEvents.add(false),
+      ),
+    );
+    authEvents.add(true);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Sign out'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Welcome back.'), findsOneWidget);
+    expect(find.textContaining('inactive'), findsNothing);
+    await authEvents.close();
+  });
+
+  testWidgets('signing out closes screens opened on top of the dashboard', (
+      tester,
+      ) async {
+    final authEvents = StreamController<bool>.broadcast();
+    await tester.pumpWidget(
+      _app(
+        signedInChanges: authEvents.stream,
+        checker: _FakeAuthorizationChecker(result: false),
+      ),
+    );
+    authEvents.add(true);
+    await tester.pumpAndSettle();
+
+    final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+    navigator.push(
+      MaterialPageRoute<void>(
+        builder: (_) => const Scaffold(body: Text('protected page')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('protected page'), findsOneWidget);
+
+    authEvents.add(false);
+    await tester.pumpAndSettle();
+
+    expect(find.text('protected page'), findsNothing);
+    expect(find.text('Welcome back.'), findsOneWidget);
+    await authEvents.close();
+  });
+
+  testWidgets(
+    'touches on screens opened above the dashboard count as activity',
+        (tester) async {
+      final authEvents = StreamController<bool>.broadcast();
+      await tester.pumpWidget(
+        _app(
+          signedInChanges: authEvents.stream,
+          checker: _FakeAuthorizationChecker(result: false),
+          signOut: () async => authEvents.add(false),
+          idleTimeout: const Duration(seconds: 30),
+        ),
+      );
+      authEvents.add(true);
+      await tester.pumpAndSettle();
+
+      final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+      navigator.push(
+        MaterialPageRoute<void>(
+          builder: (_) => const Scaffold(body: Text('form page')),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.pump(const Duration(seconds: 20));
+      await tester.tapAt(const Offset(100, 100));
+      await tester.pump(const Duration(seconds: 20));
+      expect(find.text('form page'), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 11));
+      await tester.pumpAndSettle();
+      expect(find.text('form page'), findsNothing);
+      expect(find.text('Welcome back.'), findsOneWidget);
+      await authEvents.close();
+    },
+  );
 }
 
 Widget _app({
   required Stream<bool> signedInChanges,
   required AdminAuthorizationChecker checker,
   Future<void> Function()? signOut,
+  Duration? idleTimeout,
 }) {
   return MaterialApp(
     home: AuthGate(
@@ -159,6 +298,7 @@ Widget _app({
       authorizationChecker: checker,
       districtsStream: Stream<List<DistrictModel>>.value(const []),
       signOut: signOut ?? () async {},
+      idleTimeout: idleTimeout ?? defaultIdleTimeout,
     ),
   );
 }

@@ -7,7 +7,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
 import 'models/district_model.dart';
 import 'screens/admin/district_management_screen.dart';
+import 'screens/auth/idle_timeout_gate.dart';
 import 'screens/auth/login_screen.dart';
+import 'screens/dashboard/dashboard_screen.dart';
 import 'services/admin_authorization_service.dart';
 
 Future<void> main() async {
@@ -51,6 +53,7 @@ class AuthGate extends StatefulWidget {
     this.authorizationChecker,
     this.districtsStream,
     this.signOut,
+    this.idleTimeout = defaultIdleTimeout,
   });
 
   /// Emits the current signed-in state on login, logout, and token changes.
@@ -59,6 +62,10 @@ class AuthGate extends StatefulWidget {
   final AdminAuthorizationChecker? authorizationChecker;
   final Stream<List<DistrictModel>>? districtsStream;
   final Future<void> Function()? signOut;
+
+  /// How long nobody can touch the app before the user is signed out.
+  /// Change [defaultIdleTimeout] in idle_timeout_gate.dart to adjust it.
+  final Duration idleTimeout;
 
   @override
   State<AuthGate> createState() => _AuthGateState();
@@ -73,13 +80,14 @@ class _AuthGateState extends State<AuthGate> {
   _AuthGateView _view = _AuthGateView.checking;
   bool _hasAuthenticatedUser = false;
   int _requestId = 0;
+  bool _signedOutForInactivity = false;
 
   @override
   void initState() {
     super.initState();
     _signedInChanges =
         widget.signedInChanges ??
-        FirebaseAuth.instance.idTokenChanges().map((user) => user != null);
+            FirebaseAuth.instance.idTokenChanges().map((user) => user != null);
     _listenForAuthentication();
   }
 
@@ -107,8 +115,10 @@ class _AuthGateState extends State<AuthGate> {
     if (!isSignedIn) {
       ++_requestId;
       setState(() => _view = _AuthGateView.signedOut);
+      _closeProtectedRoutes();
       return;
     }
+    _signedOutForInactivity = false;
     _checkAdministrator(forceRefresh: false);
   }
 
@@ -156,6 +166,30 @@ class _AuthGateState extends State<AuthGate> {
     }
   }
 
+  /// Called by [IdleTimeoutGate] when nobody has touched the app for too long.
+  Future<void> _signOutBecauseIdle() {
+    _signedOutForInactivity = true;
+    return _signOut();
+  }
+
+  /// Closes any screens that were opened on top of the gate (forms, dialogs),
+  /// so nothing protected stays visible after the user signs out.
+  void _closeProtectedRoutes() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Navigator.of(context).popUntil((route) => route.isFirst);
+    });
+  }
+
+  /// Only used to show "Signed in as ..." on the dashboard.
+  String? _signedInEmail() {
+    try {
+      return FirebaseAuth.instance.currentUser?.email;
+    } catch (_) {
+      return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     switch (_view) {
@@ -178,28 +212,35 @@ class _AuthGateState extends State<AuthGate> {
           ),
         );
       case _AuthGateView.signedOut:
-        return const LoginScreen();
+        return LoginScreen(
+          notice: _signedOutForInactivity
+              ? 'You were signed out because you were inactive. '
+              'Please sign in again.'
+              : null,
+        );
       case _AuthGateView.administrator:
-        return DistrictManagementScreen(
-          districtsStream: widget.districtsStream,
-          signOut: _signOut,
-          isAdministrator: true,
+        return IdleTimeoutGate(
+          timeout: widget.idleTimeout,
+          onTimeout: _signOutBecauseIdle,
+          child: DistrictManagementScreen(
+            districtsStream: widget.districtsStream,
+            signOut: _signOut,
+            isAdministrator: true,
+          ),
         );
       case _AuthGateView.nonAdministrator:
-        return _AuthorizationMessage(
-          title: 'Administrator access required',
-          message:
-              'Your account is signed in, but it does not have the '
-              'administrator permission needed to manage districts.',
-          primaryActionLabel: 'Refresh authorization',
-          onPrimaryAction: () => _checkAdministrator(forceRefresh: true),
-          onSignOut: _signOut,
+      // Everyone who is signed in but is not an administrator lands on
+      // the simple dashboard.
+        return IdleTimeoutGate(
+          timeout: widget.idleTimeout,
+          onTimeout: _signOutBecauseIdle,
+          child: DashboardScreen(email: _signedInEmail(), onSignOut: _signOut),
         );
       case _AuthGateView.error:
         return _AuthorizationMessage(
           title: 'Authorization could not be checked',
           message:
-              'Check your internet connection and try again. District '
+          'Check your internet connection and try again. District '
               'management remains unavailable until authorization is verified.',
           primaryActionLabel: 'Retry',
           onPrimaryAction: _retryAuthorization,
