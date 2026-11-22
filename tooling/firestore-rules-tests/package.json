@@ -3,10 +3,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test firestore.rules.test.mjs"
+    "test": "node --test firestore.rules.test.mjs",
+    "setup:place-index": "node initialize-place-reference-index.mjs",
+    "setup:auth-emulator": "node provision-emulator-users.mjs",
+    "test:integration": "node --test auth-firestore.integration.test.mjs",
+    "test:all": "npm run setup:auth-emulator && npm test && npm run setup:place-index && npm run test:integration"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^6.0.0",
-    "firebase": "^13.4.0"
+    "firebase": "^13.4.0",
+    "firebase-admin": "^14.5.1"
   }
 }

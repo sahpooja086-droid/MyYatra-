@@ -16,8 +16,8 @@ void main() {
     }
 
     testWidgets('calls onTimeout once after the idle time has passed', (
-        tester,
-        ) async {
+      tester,
+    ) async {
       var timeouts = 0;
       await tester.pumpWidget(gate(() => timeouts++));
 
@@ -66,8 +66,8 @@ void main() {
     });
 
     testWidgets('leaves out the email line when it is not known', (
-        tester,
-        ) async {
+      tester,
+    ) async {
       await tester.pumpWidget(
         MaterialApp(home: DashboardScreen(onSignOut: () {})),
       );

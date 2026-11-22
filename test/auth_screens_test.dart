@@ -40,8 +40,15 @@ void main() {
       await tester.tap(find.text('Sign in'));
       await tester.pump();
 
-      expect(find.text('Enter a valid email address'), findsOneWidget);
-      expect(find.text('Enter your password'), findsOneWidget);
+      final fields = find.byType(TextFormField);
+      expect(
+        tester.state<FormFieldState<String>>(fields.first).errorText,
+        'Enter a valid email address',
+      );
+      expect(
+        tester.state<FormFieldState<String>>(fields.last).errorText,
+        'Enter your password',
+      );
     });
 
     testWidgets('Forgot password link opens the recovery screen', (
@@ -55,6 +62,31 @@ void main() {
 
       expect(find.text('Forgot your password?'), findsOneWidget);
       expect(find.text('Send reset link'), findsOneWidget);
+    });
+
+    testWidgets('sign-in and password reset use the injected Firebase Auth', (
+      tester,
+    ) async {
+      final auth = _RecordingAuth();
+      await tester.pumpWidget(MaterialApp(home: LoginScreen(auth: auth)));
+      await tester.enterText(
+        find.byType(TextFormField).first,
+        ' user@example.com ',
+      );
+      await tester.enterText(find.byType(TextFormField).last, 'test input');
+      await tester.ensureVisible(find.text('Sign in'));
+      await tester.tap(find.text('Sign in'));
+      await tester.pumpAndSettle();
+      expect(auth.signedInEmail, 'user@example.com');
+
+      await tester.ensureVisible(find.text('Forgot password?'));
+      await tester.tap(find.text('Forgot password?'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Send reset link'));
+      await tester.tap(find.text('Send reset link'));
+      await tester.pumpAndSettle();
+      expect(auth.resetEmail, 'user@example.com');
+      expect(find.text('Check your inbox'), findsOneWidget);
     });
   });
 
@@ -189,4 +221,26 @@ void main() {
       expect(find.text('Check your inbox'), findsNothing);
     });
   });
+}
+
+class _RecordingAuth extends Fake implements FirebaseAuth {
+  String? signedInEmail;
+  String? resetEmail;
+
+  @override
+  Future<UserCredential> signInWithEmailAndPassword({
+    required String email,
+    required String password,
+  }) async {
+    signedInEmail = email;
+    throw FirebaseAuthException(code: 'invalid-credential');
+  }
+
+  @override
+  Future<void> sendPasswordResetEmail({
+    required String email,
+    ActionCodeSettings? actionCodeSettings,
+  }) async {
+    resetEmail = email;
+  }
 }

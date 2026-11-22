@@ -265,29 +265,29 @@ class AuthPrimaryButton extends StatelessWidget {
         ),
         child: isLoading
             ? const SizedBox(
-          height: 22,
-          width: 22,
-          child: CircularProgressIndicator(
-            strokeWidth: 2.4,
-            color: Colors.white,
-          ),
-        )
+                height: 22,
+                width: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.4,
+                  color: Colors.white,
+                ),
+              )
             : Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w600,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  if (trailingIcon != null) ...[
+                    const SizedBox(width: 10),
+                    Icon(trailingIcon, size: 20),
+                  ],
+                ],
               ),
-            ),
-            if (trailingIcon != null) ...[
-              const SizedBox(width: 10),
-              Icon(trailingIcon, size: 20),
-            ],
-          ],
-        ),
       ),
     );
   }

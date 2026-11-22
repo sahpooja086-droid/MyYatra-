@@ -156,7 +156,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           const SizedBox(height: 10),
           const Text(
             'Enter the email you use for MyYatra and we will send you a '
-                'link to reset your password.',
+            'link to reset your password.',
             style: TextStyle(
               color: AuthPalette.mutedText,
               fontSize: 16,
@@ -238,8 +238,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         const SizedBox(height: 12),
         Text(
           'If an account exists for $_sentTo, a password reset link is on '
-              'its way. It can take a few minutes, and it may land in your '
-              'spam folder.',
+          'its way. It can take a few minutes, and it may land in your '
+          'spam folder.',
           textAlign: TextAlign.center,
           style: const TextStyle(
             color: AuthPalette.mutedText,

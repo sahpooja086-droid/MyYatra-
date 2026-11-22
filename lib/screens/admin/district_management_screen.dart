@@ -4,16 +4,21 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../controllers/district_management_controller.dart';
 import '../../data/nepal_district_directory.dart';
 import '../../models/district_model.dart';
+import '../../models/place_model.dart';
 import '../../services/district_data_validator.dart';
 import '../../services/district_mutation_service.dart';
 import '../../services/district_service.dart';
+import '../../services/place_service.dart';
 import 'district_form_screen.dart';
+import 'place_management_screen.dart';
 
 class DistrictManagementScreen extends StatefulWidget {
   const DistrictManagementScreen({
     super.key,
     this.districtsStream,
     this.districtsStreamFactory,
+    this.placesStreamFactory,
+    this.placeMutations,
     this.mutationService,
     this.signOut,
     this.isAdministrator = false,
@@ -24,6 +29,8 @@ class DistrictManagementScreen extends StatefulWidget {
 
   /// Optional factory allows injected streams to be recreated when retried.
   final Stream<List<DistrictModel>> Function()? districtsStreamFactory;
+  final Stream<List<PlaceModel>> Function()? placesStreamFactory;
+  final PlaceService? Function()? placeMutations;
 
   /// Optional mutation service for isolated test or explicitly enabled builds.
   /// The production [AuthGate] does not provide a write service.
@@ -43,6 +50,7 @@ class _DistrictManagementScreenState extends State<DistrictManagementScreen> {
   static const String allProvincesLabel = 'All Provinces';
 
   late Stream<List<DistrictModel>> _districtsStream;
+  List<DistrictModel> _latestDistricts = const [];
   DistrictManagementController? _controller;
   final TextEditingController _searchController = TextEditingController();
   String _selectedProvince = allProvincesLabel;
@@ -327,6 +335,7 @@ class _DistrictManagementScreenState extends State<DistrictManagementScreen> {
         }
 
         final allDistricts = snapshot.data ?? const <DistrictModel>[];
+        _latestDistricts = allDistricts;
         return _buildDistrictList(
           _filterDistricts(allDistricts),
           hasActiveFilters:
@@ -362,9 +371,27 @@ class _DistrictManagementScreenState extends State<DistrictManagementScreen> {
         ),
         actions: [
           IconButton(
+            key: const Key('open-place-management'),
+            tooltip: widget.placesStreamFactory == null
+                ? 'Manage places (preview only)'
+                : 'Manage places',
+            onPressed: () => Navigator.of(context).push<void>(
+              MaterialPageRoute<void>(
+                builder: (_) => PlaceManagementScreen(
+                  isAdministrator: widget.isAdministrator,
+                  signOut: widget.signOut,
+                  districtsStreamFactory: widget.districtsStreamFactory,
+                  placesStreamFactory: widget.placesStreamFactory,
+                  placeMutations: widget.placeMutations,
+                  initialDistricts: _latestDistricts,
+                ),
+              ),
+            ),
+            icon: const Icon(Icons.place_outlined),
+          ),
+          IconButton(
             tooltip: 'Log out',
-            onPressed:
-                widget.signOut ?? () => FirebaseAuth.instance.signOut(),
+            onPressed: widget.signOut ?? () => FirebaseAuth.instance.signOut(),
             icon: const Icon(Icons.logout),
           ),
         ],

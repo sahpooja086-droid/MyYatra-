@@ -6,11 +6,14 @@ import 'package:myyatra/main.dart';
 import 'package:myyatra/models/district_model.dart';
 import 'package:myyatra/screens/auth/idle_timeout_gate.dart';
 import 'package:myyatra/services/admin_authorization_service.dart';
+import 'package:myyatra/services/district_mutation_service.dart';
+
+import 'support/fake_district_mutation_service.dart';
 
 void main() {
   testWidgets('shows checking state while admin claim is being resolved', (
-      tester,
-      ) async {
+    tester,
+  ) async {
     final checker = _FakeAuthorizationChecker(pendingResult: Completer<bool>());
     await tester.pumpWidget(
       _app(signedInChanges: Stream<bool>.value(true), checker: checker),
@@ -39,8 +42,8 @@ void main() {
   });
 
   testWidgets('returns to login after an authenticated user signs out', (
-      tester,
-      ) async {
+    tester,
+  ) async {
     final authEvents = StreamController<bool>.broadcast();
     await tester.pumpWidget(
       _app(
@@ -59,6 +62,30 @@ void main() {
     await authEvents.close();
   });
 
+  testWidgets('signing out of Manage Places closes administrator routes', (
+    tester,
+  ) async {
+    final authEvents = StreamController<bool>.broadcast();
+    addTearDown(authEvents.close);
+    await tester.pumpWidget(
+      _app(
+        signedInChanges: authEvents.stream,
+        checker: _FakeAuthorizationChecker(result: true),
+        signOut: () async => authEvents.add(false),
+      ),
+    );
+    authEvents.add(true);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('open-place-management')));
+    await tester.pumpAndSettle();
+    expect(find.text('Manage Places'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Log out'));
+    await tester.pumpAndSettle();
+    expect(find.text('Welcome back.'), findsOneWidget);
+    expect(find.byKey(const Key('add-place-button')), findsNothing);
+  });
+
   testWidgets('shows district management only for an admin', (tester) async {
     await tester.pumpWidget(
       _app(
@@ -73,9 +100,31 @@ void main() {
     expect(find.byKey(const Key('district-search-field')), findsOneWidget);
   });
 
+  testWidgets('authorized admin receives the injected mutation service', (
+    tester,
+  ) async {
+    final service = FakeDistrictMutationService([_kaski()]);
+    await tester.pumpWidget(
+      _app(
+        signedInChanges: Stream<bool>.value(true),
+        checker: _FakeAuthorizationChecker(result: true),
+        mutationService: service,
+        districts: [_kaski()],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Edit district'), findsOneWidget);
+    expect(find.byTooltip('Delete district'), findsOneWidget);
+    expect(
+      find.textContaining('Using the injected district service'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('admin logout uses the injected callback without Firebase', (
-      tester,
-      ) async {
+    tester,
+  ) async {
     var signOutCalled = false;
     await tester.pumpWidget(
       _app(
@@ -95,12 +144,15 @@ void main() {
   });
 
   testWidgets('hides district management controls from non-admin users', (
-      tester,
-      ) async {
+    tester,
+  ) async {
+    final service = FakeDistrictMutationService([_kaski()]);
     await tester.pumpWidget(
       _app(
         signedInChanges: Stream<bool>.value(true),
         checker: _FakeAuthorizationChecker(result: false),
+        mutationService: service,
+        districts: [_kaski()],
       ),
     );
     await tester.pumpAndSettle();
@@ -108,13 +160,34 @@ void main() {
     expect(find.text('Welcome to MyYatra'), findsOneWidget);
     expect(find.text('Manage Districts'), findsNothing);
     expect(find.text('Add District'), findsNothing);
+    expect(find.byKey(const Key('open-place-management')), findsNothing);
     expect(find.byKey(const Key('district-search-field')), findsNothing);
     expect(find.text('Sign out'), findsOneWidget);
+    expect(service.addCalls + service.updateCalls + service.deleteCalls, 0);
+  });
+
+  testWidgets('refreshes authorization from the non-admin dashboard', (
+    tester,
+  ) async {
+    final checker = _FakeAuthorizationChecker(
+      result: false,
+      refreshedResult: true,
+    );
+    await tester.pumpWidget(
+      _app(signedInChanges: Stream<bool>.value(true), checker: checker),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Dashboard'), findsOneWidget);
+    await tester.ensureVisible(find.text('Refresh authorization'));
+    await tester.tap(find.text('Refresh authorization'));
+    await tester.pumpAndSettle();
+    expect(checker.refreshRequested, isTrue);
+    expect(find.byKey(const Key('open-place-management')), findsOneWidget);
   });
 
   testWidgets('shows a retryable message when authorization check fails', (
-      tester,
-      ) async {
+    tester,
+  ) async {
     await tester.pumpWidget(
       _app(
         signedInChanges: Stream<bool>.value(true),
@@ -129,8 +202,8 @@ void main() {
   });
 
   testWidgets('non-admin users land on the dashboard and can sign out', (
-      tester,
-      ) async {
+    tester,
+  ) async {
     var signOutCalled = false;
     await tester.pumpWidget(
       _app(
@@ -151,8 +224,8 @@ void main() {
   });
 
   testWidgets('signs a regular user out after being idle and says why', (
-      tester,
-      ) async {
+    tester,
+  ) async {
     final authEvents = StreamController<bool>.broadcast();
     await tester.pumpWidget(
       _app(
@@ -188,18 +261,22 @@ void main() {
     authEvents.add(true);
     await tester.pumpAndSettle();
     expect(find.text('Manage Districts'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('open-place-management')));
+    await tester.pumpAndSettle();
+    expect(find.text('Manage Places'), findsOneWidget);
 
     await tester.pump(const Duration(seconds: 31));
     await tester.pumpAndSettle();
 
     expect(find.text('Welcome back.'), findsOneWidget);
     expect(find.text('Manage Districts'), findsNothing);
+    expect(find.text('Manage Places'), findsNothing);
     await authEvents.close();
   });
 
   testWidgets('a manual sign out does not show the inactivity notice', (
-      tester,
-      ) async {
+    tester,
+  ) async {
     final authEvents = StreamController<bool>.broadcast();
     await tester.pumpWidget(
       _app(
@@ -220,8 +297,8 @@ void main() {
   });
 
   testWidgets('signing out closes screens opened on top of the dashboard', (
-      tester,
-      ) async {
+    tester,
+  ) async {
     final authEvents = StreamController<bool>.broadcast();
     await tester.pumpWidget(
       _app(
@@ -251,7 +328,7 @@ void main() {
 
   testWidgets(
     'touches on screens opened above the dashboard count as activity',
-        (tester) async {
+    (tester) async {
       final authEvents = StreamController<bool>.broadcast();
       await tester.pumpWidget(
         _app(
@@ -289,6 +366,8 @@ void main() {
 Widget _app({
   required Stream<bool> signedInChanges,
   required AdminAuthorizationChecker checker,
+  DistrictMutationService? mutationService,
+  List<DistrictModel> districts = const [],
   Future<void> Function()? signOut,
   Duration? idleTimeout,
 }) {
@@ -296,12 +375,21 @@ Widget _app({
     home: AuthGate(
       signedInChanges: signedInChanges,
       authorizationChecker: checker,
-      districtsStream: Stream<List<DistrictModel>>.value(const []),
+      districtsStream: Stream<List<DistrictModel>>.value(districts),
+      districtMutationService: mutationService,
       signOut: signOut ?? () async {},
       idleTimeout: idleTimeout ?? defaultIdleTimeout,
     ),
   );
 }
+
+DistrictModel _kaski() => DistrictModel(
+  id: 'kaski',
+  name: 'Kaski',
+  province: 'Gandaki',
+  description: 'Lake district',
+  experienceTypes: const ['Nature'],
+);
 
 class _FakeAuthorizationChecker implements AdminAuthorizationChecker {
   _FakeAuthorizationChecker({

@@ -310,29 +310,89 @@ void main() {
 
         expect(repository.documents.keys, ['kaski']);
         expect(repository.documents['kaski']!.name, 'Kaski');
-        expect(
-          repository.documents['kaski']!.description,
-          'Original record',
-        );
+        expect(repository.documents['kaski']!.description, 'Original record');
         expect(repository.updateCalls, 0);
       },
     );
 
-    test('deletes only the requested existing document', () async {
+    test('deletes a canonical district document', () async {
+      final repository = _FakeDistrictRepository()
+        ..documents['kaski'] = _district(
+          id: 'kaski',
+          name: 'Kaski',
+          province: 'Gandaki',
+          description: 'Existing record',
+          experienceTypes: const ['Nature'],
+          updatedAt: DateTime.utc(2026),
+        );
+      final service = DistrictService(repository: repository);
+
+      await service.deleteDistrict('kaski');
+
+      expect(repository.documents, isEmpty);
+      expect(repository.deleteCalls, 1);
+    });
+
+    test('refuses to delete a legacy document ID', () async {
       final repository = _FakeDistrictRepository()
         ..documents['legacy-kaski'] = _district(
           id: 'legacy-kaski',
           name: 'Kaski',
           province: 'Gandaki',
-          description: 'Existing record',
+          description: 'Existing legacy record',
           experienceTypes: const ['Nature'],
         );
       final service = DistrictService(repository: repository);
 
-      await service.deleteDistrict('legacy-kaski');
+      await expectLater(
+        service.deleteDistrict('legacy-kaski'),
+        throwsA(isA<DistrictLegacyRecordException>()),
+      );
 
-      expect(repository.documents, isEmpty);
-      expect(repository.deleteCalls, 1);
+      expect(repository.documents.keys, ['legacy-kaski']);
+      expect(repository.deleteCalls, 0);
+    });
+
+    test('refuses to delete a canonical ID with malformed identity', () async {
+      final repository = _FakeDistrictRepository()
+        ..documents['kaski'] = _district(
+          id: 'kaski',
+          name: 'Kaski',
+          province: 'Bagmati',
+          description: 'Malformed record',
+          experienceTypes: const ['Nature'],
+          updatedAt: DateTime.utc(2026),
+        );
+      final service = DistrictService(repository: repository);
+
+      await expectLater(
+        service.deleteDistrict('kaski'),
+        throwsA(isA<DistrictValidationException>()),
+      );
+
+      expect(repository.documents['kaski']?.province, 'Bagmati');
+      expect(repository.deleteCalls, 0);
+    });
+
+    test('refuses to delete a canonical record with invalid fields', () async {
+      final repository = _FakeDistrictRepository()
+        ..documents['kaski'] = _district(
+          id: 'kaski',
+          name: 'Kaski',
+          province: 'Gandaki',
+          description: '   ',
+          experienceTypes: const ['Nature'],
+          updatedAt: DateTime.utc(2026),
+        );
+      final service = DistrictService(repository: repository);
+
+      await expectLater(
+        service.deleteDistrict('kaski'),
+        throwsA(isA<DistrictValidationException>()),
+      );
+
+      expect(repository.documents['kaski']?.description, '   ');
+      expect(repository.deleteCalls, 0);
     });
 
     test('returns friendly permission and network messages', () async {
@@ -389,6 +449,7 @@ DistrictModel _district({
   required String province,
   required String description,
   required List<String> experienceTypes,
+  DateTime? updatedAt,
 }) {
   return DistrictModel(
     id: id,
@@ -396,6 +457,7 @@ DistrictModel _district({
     province: province,
     description: description,
     experienceTypes: experienceTypes,
+    updatedAt: updatedAt,
   );
 }
 

@@ -5,7 +5,9 @@ import 'auth_widgets.dart';
 import 'forgot_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key, this.notice});
+  const LoginScreen({super.key, this.auth, this.notice});
+
+  final FirebaseAuth? auth;
 
   /// Optional message shown above the form, for example
   /// "You were signed out because you were inactive."
@@ -40,7 +42,8 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
+      final auth = widget.auth ?? FirebaseAuth.instance;
+      await auth.signInWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text,
       );
@@ -85,10 +88,15 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _openForgotPassword() {
     FocusScope.of(context).unfocus();
+    final auth = widget.auth;
+    final initialEmail = _emailController.text.trim();
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) =>
-            ForgotPasswordScreen(initialEmail: _emailController.text.trim()),
+        builder: (_) => ForgotPasswordScreen(
+          initialEmail: initialEmail,
+          sendPasswordResetEmail: (email) => (auth ?? FirebaseAuth.instance)
+              .sendPasswordResetEmail(email: email),
+        ),
       ),
     );
   }
@@ -205,7 +213,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 20),
                     const Text(
                       'Use an existing account. New account registration '
-                          'is not available here.',
+                      'is not available here.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: AuthPalette.mutedText,

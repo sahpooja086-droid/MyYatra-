@@ -121,6 +121,90 @@ service cloud.firestore {
         && data.updatedAt is timestamp;
     }
 
+    function canonicalPlaceId(placeId, data) {
+      let name = data.get('name', '');
+      let districtId = data.get('districtId', '');
+      let slug = name.lower()
+        .replace('[^a-z0-9]+', '-')
+        .replace('^-+|-+$', '');
+      return name is string
+        && districtId is string
+        && slug.size() > 0
+        && placeId == districtId + '--' + slug;
+    }
+
+    function isCanonicalDistrictReference(districtId) {
+      let districtPath = /databases/$(database)/documents/districts/$(districtId);
+      return existsAfter(districtPath)
+        && isCanonicalDistrict(districtId, getAfter(districtPath).data);
+    }
+
+    function placeIndexReady() {
+      // A trusted emulator initializer accounts for records predating the rules.
+      return exists(/databases/$(database)/documents/internal/placeReferenceIndex);
+    }
+
+    function placeCount(districtId) {
+      let path = /databases/$(database)/documents/districtPlaceCounts/$(districtId);
+      return exists(path) ? get(path).data.count : 0;
+    }
+
+    function changesPlaceCount(districtId, placeId, delta) {
+      // The ID pairs one Place mutation with one count change for this district.
+      let path = /databases/$(database)/documents/districtPlaceCounts/$(districtId);
+      let next = getAfter(path).data;
+      return placeIndexReady()
+        && next.placeId == placeId
+        && next.count == placeCount(districtId) + delta;
+    }
+
+    function validPlaceCountWrite(districtId) {
+      let next = request.resource.data;
+      let path = /databases/$(database)/documents/places/$(next.placeId);
+      let before = placeCount(districtId);
+      return placeIndexReady()
+        && next.keys().hasOnly(['count', 'placeId'])
+        && next.count is int && next.count >= 0
+        && next.placeId is string
+        && ((next.count == before + 1
+            && !exists(path) && existsAfter(path)
+            && getAfter(path).data.districtId == districtId)
+          || (next.count == before - 1
+            && exists(path) && !existsAfter(path)
+            && get(path).data.districtId == districtId));
+    }
+
+    function validPlaceData(placeId, data) {
+      return data.keys().hasOnly([
+          'name', 'category', 'districtId', 'description', 'imageUrl',
+          'updatedAt'
+        ])
+        && data.keys().hasAll([
+          'name', 'category', 'districtId', 'description', 'updatedAt'
+        ])
+        && data.name is string
+        && data.name == data.name.trim()
+        && data.name.size() > 0
+        && data.name.size() <= 120
+        && data.category is string
+        && data.category == data.category.trim()
+        && data.category.size() > 0
+        && data.category.size() <= 80
+        && data.districtId is string
+        && data.description is string
+        && data.description == data.description.trim()
+        && data.description.size() > 0
+        && data.description.size() <= 2000
+        && data.updatedAt is timestamp
+        && (!data.keys().hasAny(['imageUrl'])
+          || (data.imageUrl is string
+            && data.imageUrl == data.imageUrl.trim()
+            && data.imageUrl.size() > 0
+            && data.imageUrl.size() <= 2048
+            && data.imageUrl.matches('^https://[^/\\s]+(/[^\\s]*)?$')))
+        && canonicalPlaceId(placeId, data);
+    }
+
     match /districts/{districtId} {
       // District documents contain public travel information only. Firestore
       // rules cannot redact individual fields from a returned document.
@@ -138,9 +222,46 @@ service cloud.firestore {
         && request.resource.data.province == resource.data.province;
 
       // Admins may delete only records with a canonical document ID and
-      // matching district identity. Legacy/malformed records need review.
+      // matching identity and valid district fields. Legacy/malformed records
+      // need review.
       allow delete: if isAdmin()
-        && isCanonicalDistrict(districtId, resource.data);
+        && validDistrictData(resource.data)
+        && isCanonicalDistrict(districtId, resource.data)
+        && placeIndexReady()
+        && placeCount(districtId) == 0;
+    }
+
+    match /districtPlaceCounts/{districtId} {
+      allow get: if isAdmin();
+      allow create, update: if isAdmin() && validPlaceCountWrite(districtId);
+    }
+
+    match /internal/placeReferenceIndex {
+      allow get: if isAdmin();
+    }
+
+    match /places/{placeId} {
+      // Place records contain public travel information only.
+      allow read: if true;
+
+      allow create: if isAdmin()
+        && validPlaceData(placeId, request.resource.data)
+        && isCanonicalDistrictReference(request.resource.data.districtId)
+        && changesPlaceCount(request.resource.data.districtId, placeId, 1);
+
+      // Place identity and district association are stable after creation.
+      allow update: if isAdmin()
+        && validPlaceData(placeId, request.resource.data)
+        && isCanonicalDistrictReference(request.resource.data.districtId)
+        && request.resource.data.name == resource.data.name
+        && request.resource.data.districtId == resource.data.districtId;
+
+      // Malformed/legacy records remain readable but require review before
+      // deletion.
+      allow delete: if isAdmin()
+        && validPlaceData(placeId, resource.data)
+        && isCanonicalDistrictReference(resource.data.districtId)
+        && changesPlaceCount(resource.data.districtId, placeId, -1);
     }
 
     // No rules are granted for any other collection or document.

@@ -120,6 +120,25 @@ class FirestoreDistrictRepository implements DistrictRepository {
     await _firestore.runTransaction<void>((transaction) async {
       final existing = await transaction.get(reference);
       if (!existing.exists) throw DistrictNotFoundException(id);
+      final index = await transaction.get(
+        _firestore.doc('internal/placeReferenceIndex'),
+      );
+      final counter = await transaction.get(
+        _firestore.doc('districtPlaceCounts/$id'),
+      );
+      final count = counter.exists ? counter.data()!['count'] : 0;
+      if (!index.exists || count is! int || count < 0) {
+        throw const DistrictServiceException(
+          'Place references need verification before this district can be '
+          'deleted. No changes were made.',
+        );
+      }
+      if (count > 0) {
+        throw const DistrictServiceException(
+          'This district cannot be deleted because one or more places '
+          'reference it.',
+        );
+      }
       transaction.delete(reference);
     });
   }
@@ -212,7 +231,31 @@ class DistrictService implements DistrictMutationService {
     if (id.trim().isEmpty) {
       throw const DistrictValidationException('District ID is required.');
     }
-    return _runFirestoreOperation('delete', () => _repository.delete(id));
+    return _runFirestoreOperation('delete', () async {
+      final existing = await _repository.getById(id);
+      if (existing == null) throw DistrictNotFoundException(id);
+
+      final canonical = NepalDistrictDirectory.byId(id);
+      if (canonical == null) {
+        throw DistrictLegacyRecordException(existing.name);
+      }
+      if (existing.name != canonical.name ||
+          existing.province != canonical.province) {
+        throw const DistrictValidationException(
+          'The existing district name or province does not match its '
+          'canonical document ID. No changes were made.',
+        );
+      }
+      DistrictDataValidator.normalize(existing, isCreate: false);
+      if (existing.updatedAt == null) {
+        throw const DistrictValidationException(
+          'The existing district record has no valid updated date. No '
+          'changes were made.',
+        );
+      }
+
+      await _repository.delete(id);
+    });
   }
 
   Future<T> _runFirestoreOperation<T>(

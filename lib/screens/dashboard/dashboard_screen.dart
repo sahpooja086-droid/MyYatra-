@@ -4,9 +4,15 @@ import '../auth/auth_widgets.dart';
 
 /// The simplest possible home screen for a signed-in user.
 class DashboardScreen extends StatelessWidget {
-  const DashboardScreen({super.key, required this.onSignOut, this.email});
+  const DashboardScreen({
+    super.key,
+    required this.onSignOut,
+    this.email,
+    this.onRefreshAuthorization,
+  });
 
   final VoidCallback onSignOut;
+  final VoidCallback? onRefreshAuthorization;
 
   /// Shown as "Signed in as ..." when it is known.
   final String? email;
@@ -67,6 +73,11 @@ class DashboardScreen extends StatelessWidget {
                     trailingIcon: Icons.logout,
                     onPressed: onSignOut,
                   ),
+                  if (onRefreshAuthorization != null)
+                    TextButton(
+                      onPressed: onRefreshAuthorization,
+                      child: const Text('Refresh authorization'),
+                    ),
                 ],
               ),
             ),
