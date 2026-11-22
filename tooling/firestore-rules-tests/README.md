@@ -22,6 +22,42 @@ unauthenticated write denial, admin create/update/delete with persisted-result
 checks, canonical district/province validation, duplicate canonical names,
 required and bounded descriptions, experience category validation, unknown
 fields, district identity changes, and legacy/malformed delete protection.
+They also cover public place reads, admin place CRUD, unauthorized place
+mutations, canonical place IDs, canonical district references, required place
+fields, optional HTTPS image URLs, prohibited extra fields, and immutable place
+identity.
+
+Place documents use `places/{districtId}--{normalized-place-name}` IDs and the
+fields `name`, `category`, `districtId`, `description`, `updatedAt`, and
+optional `imageUrl`. Name/category/description limits are validated in Flutter
+and in rules. Place rules verify that the referenced district document itself
+has canonical ID, name, and province data. The category is free text because
+the repository contains no approved place-category list. The Flutter Manage
+Places list uses the named demo Firestore instance when debug emulator mode is
+enabled and its local Firestore endpoint is verified. Manage Places uses local
+preview data outside that mode. Add, Edit, and Delete require a separate debug
+opt-in, matching loaded rules, an initialized index, and administrator access.
+
+### District deletion and Place references
+
+District deletion requires an initialized reference index and a zero Place
+count for the district. Rules enforce that each Place creation or deletion
+changes the count atomically for that specific Place. A Place update keeps its
+district identity and can remove the optional `imageUrl` field.
+
+On a fresh, isolated demo emulator running the current rules, initialize the
+index before exercising District Delete. The same initializer can account for
+pre-existing Places in an isolated copy, including references to IDs whose
+district records are missing. Run it before other privileged data writers.
+It records counts and a readiness marker in one transaction and leaves Place
+and district records intact. Until initialization, district deletion is blocked
+and district creation, editing, and listing still work.
+
+```powershell
+$env:GCLOUD_PROJECT = 'demo-myyatra'
+$env:FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080'
+npm --prefix tooling/firestore-rules-tests run setup:place-index
+```
 
 The CLI project ID is a `demo-` ID and the emulator is local. Do not replace it
 with the production project ID when running rules tests.
@@ -96,6 +132,7 @@ $env:MYYATRA_EMULATOR_ADMIN_PASSWORD = 'LocalOnly-Admin-123!'
 $env:MYYATRA_EMULATOR_USER_EMAIL = 'district-user@myyatra.test'
 $env:MYYATRA_EMULATOR_USER_PASSWORD = 'LocalOnly-User-123!'
 npm --prefix tooling/firestore-rules-tests run setup:auth-emulator
+npm --prefix tooling/firestore-rules-tests run setup:place-index
 ```
 
 Then launch the Android Emulator build from another terminal:
@@ -115,3 +152,24 @@ there is no production fallback.
 Do not use these test credentials outside the demo emulators. Without the
 debug `--dart-define`, Add/Edit/Delete remain local-preview-only. Release and
 profile builds reject emulator CRUD mode.
+
+### Manual Place CRUD in the demo emulator
+
+After the reference index has been initialized on the approved demo instance,
+append `--dart-define=MYYATRA_ENABLE_EMULATOR_PLACE_CRUD=true` to the debug
+launch command above. Sign in as the local administrator. Add a Place, edit
+its description and clear its image URL, and verify the live list reflects the
+changes. Confirm the referenced district cannot be deleted while the Place
+exists, then delete the Place and verify that the district can be deleted.
+
+If rules or the index cannot be verified, Manage Places offers previews.
+Restart the app after initializing the index so the administrator check can
+enable the write controls.
+
+The automated Place Auth + Firestore test requires a fresh isolated project
+`demo-myyatra-place-crud-qa` with Auth on `127.0.0.1:19099` and Firestore on
+`127.0.0.1:18082`. Set `GCLOUD_PROJECT`, `FIREBASE_AUTH_EMULATOR_HOST`, and
+`FIRESTORE_EMULATOR_HOST` to those values, initialize its index using
+`setup:place-index`, then run `node --test --test-isolation=none
+tooling/firestore-rules-tests/place-auth-firestore.integration.test.mjs` from
+the project root.

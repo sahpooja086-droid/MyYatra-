@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -6,24 +7,31 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'firebase_options.dart';
 import 'models/district_model.dart';
+import 'models/place_model.dart';
 import 'screens/admin/district_management_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'services/admin_authorization_service.dart';
 import 'services/district_mutation_service.dart';
 import 'services/district_service.dart';
+import 'services/place_service.dart';
 
 const bool _enableEmulatorDistrictCrud = bool.fromEnvironment(
   'MYYATRA_ENABLE_EMULATOR_DISTRICT_CRUD',
   defaultValue: false,
+);
+const bool _enableEmulatorPlaceCrud = bool.fromEnvironment(
+  'MYYATRA_ENABLE_EMULATOR_PLACE_CRUD',
 );
 const String _firestoreEmulatorHost = String.fromEnvironment(
   'MYYATRA_FIRESTORE_EMULATOR_HOST',
   defaultValue: '10.0.2.2',
 );
 const String _emulatorProjectId = 'demo-myyatra';
+const _localEmulatorHosts = {'10.0.2.2', '127.0.0.1', 'localhost', '::1'};
 const FirebaseOptions _emulatorFirebaseOptions = FirebaseOptions(
   apiKey: 'demo-api-key',
   appId: '1:123456789012:android:0123456789abcdef',
@@ -32,18 +40,16 @@ const FirebaseOptions _emulatorFirebaseOptions = FirebaseOptions(
 );
 
 Future<void> main() async {
+  if (_enableEmulatorPlaceCrud && (!_enableEmulatorDistrictCrud || !kDebugMode)) {
+    throw StateError('Place CRUD requires debug Firebase Emulator mode.');
+  }
   if (_enableEmulatorDistrictCrud && !kDebugMode) {
     throw StateError(
       'Emulator district CRUD is available only in debug builds.',
     );
   }
   if (_enableEmulatorDistrictCrud &&
-      !const {
-        '10.0.2.2',
-        '127.0.0.1',
-        'localhost',
-        '::1',
-      }.contains(_firestoreEmulatorHost)) {
+      !_localEmulatorHosts.contains(_firestoreEmulatorHost)) {
     throw StateError(
       'District CRUD may connect only to a local Firestore Emulator host.',
     );
@@ -58,6 +64,8 @@ Future<void> main() async {
   FirebaseAuth? firebaseAuth;
   DistrictService? districtService;
   DistrictMutationService? districtMutationService;
+  PlaceService? placeService;
+  Future<PlaceService?> Function()? verifiedPlaceMutations;
   if (_enableEmulatorDistrictCrud) {
     final firebaseApp = await Firebase.initializeApp(
       name: 'myyatra-demo-emulator',
@@ -73,6 +81,27 @@ Future<void> main() async {
 
     final firestore = FirebaseFirestore.instanceFor(app: firebaseApp);
     firestore.useFirestoreEmulator(_firestoreEmulatorHost, 8080);
+    final settings = firestore.settings;
+    if (settings.sslEnabled == false &&
+        _localEmulatorHosts.any((host) => settings.host == '$host:8080')) {
+      final service = PlaceService(
+        repository: FirestorePlaceRepository(firestore: firestore),
+        beforeMutation: () async {
+          if (!_enableEmulatorPlaceCrud ||
+              !kDebugMode ||
+              !await _verifyPlaceMutations(firestore)) {
+            throw const PlaceServiceException(
+              'The emulator rules or Place reference index could not be verified.',
+            );
+          }
+        },
+      );
+      placeService = service;
+      if (_enableEmulatorPlaceCrud && kDebugMode) {
+        verifiedPlaceMutations = () async =>
+            await _verifyPlaceMutations(firestore) ? service : null;
+      }
+    }
     districtService = DistrictService(
       repository: FirestoreDistrictRepository(firestore: firestore),
     );
@@ -88,8 +117,54 @@ Future<void> main() async {
       firebaseAuth: firebaseAuth,
       districtsStreamFactory: districtService?.getDistricts,
       districtMutationService: districtMutationService,
+      placesStreamFactory: placeService?.getPlaces,
+      verifiedPlaceMutations: verifiedPlaceMutations,
     ),
   );
+}
+
+Future<bool> _verifyPlaceMutations(FirebaseFirestore firestore) async {
+  final settings = firestore.settings;
+  final host = settings.host?.replaceFirst(RegExp(r':8080$'), '');
+  if (host == null ||
+      !_localEmulatorHosts.contains(host) ||
+      settings.host != '$host:8080' ||
+      settings.sslEnabled != false ||
+      firestore.app.options.projectId != _emulatorProjectId) {
+    return false;
+  }
+  final client = HttpClient()..findProxy = (_) => 'DIRECT';
+  try {
+    return await (() async {
+      final endpoint = Uri(
+        scheme: 'http',
+        host: host,
+        port: 8080,
+        path: '/emulator/v1/projects/$_emulatorProjectId:ruleCoverage',
+      );
+      final request = await client.getUrl(endpoint);
+      request.followRedirects = false;
+      final response = await request.close();
+      if (response.statusCode != HttpStatus.ok) return false;
+      final coverage = jsonDecode(await utf8.decoder.bind(response).join());
+      final files = coverage['rules']['files'] as List;
+      if (files.length != 1) return false;
+      final loaded = files.single['content'] as String;
+      final expected = await rootBundle.loadString('firestore.rules');
+      if (loaded.replaceAll('\r\n', '\n') !=
+          expected.replaceAll('\r\n', '\n')) {
+        return false;
+      }
+      final index = await firestore
+          .doc('internal/placeReferenceIndex')
+          .get(const GetOptions(source: Source.server));
+      return index.data()?['initialized'] == true;
+    })().timeout(const Duration(seconds: 5));
+  } catch (_) {
+    return false;
+  } finally {
+    client.close(force: true);
+  }
 }
 
 Future<void> _verifyEmulatorsReachable() async {
@@ -124,11 +199,15 @@ class MyApp extends StatelessWidget {
     this.firebaseAuth,
     this.districtsStreamFactory,
     this.districtMutationService,
+    this.placesStreamFactory,
+    this.verifiedPlaceMutations,
   });
 
   final FirebaseAuth? firebaseAuth;
   final Stream<List<DistrictModel>> Function()? districtsStreamFactory;
   final DistrictMutationService? districtMutationService;
+  final Stream<List<PlaceModel>> Function()? placesStreamFactory;
+  final Future<PlaceService?> Function()? verifiedPlaceMutations;
 
   @override
   Widget build(BuildContext context) {
@@ -143,6 +222,8 @@ class MyApp extends StatelessWidget {
         firebaseAuth: firebaseAuth,
         districtsStreamFactory: districtsStreamFactory,
         districtMutationService: districtMutationService,
+        placesStreamFactory: placesStreamFactory,
+        verifiedPlaceMutations: verifiedPlaceMutations,
       ),
     );
   }
@@ -166,6 +247,8 @@ class AuthGate extends StatefulWidget {
     this.districtsStreamFactory,
     this.firebaseAuth,
     this.districtMutationService,
+    this.placesStreamFactory,
+    this.verifiedPlaceMutations,
     this.signOut,
   });
 
@@ -177,6 +260,8 @@ class AuthGate extends StatefulWidget {
   final Stream<List<DistrictModel>> Function()? districtsStreamFactory;
   final FirebaseAuth? firebaseAuth;
   final DistrictMutationService? districtMutationService;
+  final Stream<List<PlaceModel>> Function()? placesStreamFactory;
+  final Future<PlaceService?> Function()? verifiedPlaceMutations;
   final Future<void> Function()? signOut;
 
   @override
@@ -192,15 +277,16 @@ class _AuthGateState extends State<AuthGate> {
   _AuthGateView _view = _AuthGateView.checking;
   bool _hasAuthenticatedUser = false;
   int _requestId = 0;
+  PlaceService? _placeMutations;
 
   @override
   void initState() {
     super.initState();
     _signedInChanges =
         widget.signedInChanges ??
-        (widget.firebaseAuth ?? FirebaseAuth.instance)
-            .idTokenChanges()
-            .map((user) => user != null);
+        (widget.firebaseAuth ?? FirebaseAuth.instance).idTokenChanges().map(
+          (user) => user != null,
+        );
     _listenForAuthentication();
   }
 
@@ -217,17 +303,18 @@ class _AuthGateState extends State<AuthGate> {
       onError: (Object _) {
         if (!mounted) return;
         ++_requestId;
-        setState(() => _view = _AuthGateView.error);
+        _showAccessScreen(_AuthGateView.error);
       },
     );
   }
 
   void _onSignedInChanged(bool isSignedIn) {
     if (!mounted) return;
+    final wasAuthenticated = _hasAuthenticatedUser;
     _hasAuthenticatedUser = isSignedIn;
     if (!isSignedIn) {
       ++_requestId;
-      setState(() => _view = _AuthGateView.signedOut);
+      _showAccessScreen(_AuthGateView.signedOut, closeRoutes: wasAuthenticated);
       return;
     }
     _checkAdministrator(forceRefresh: false);
@@ -245,14 +332,31 @@ class _AuthGateState extends State<AuthGate> {
         forceRefresh: forceRefresh,
       );
       if (!mounted || requestId != _requestId) return;
+      final placeMutations = isAdministrator
+          ? await widget.verifiedPlaceMutations?.call()
+          : null;
+      if (!mounted || requestId != _requestId) return;
+      if (!isAdministrator) {
+        _showAccessScreen(_AuthGateView.nonAdministrator);
+        return;
+      }
       setState(() {
-        _view = isAdministrator
-            ? _AuthGateView.administrator
-            : _AuthGateView.nonAdministrator;
+        _placeMutations = placeMutations;
+        _view = _AuthGateView.administrator;
       });
     } catch (_) {
       if (!mounted || requestId != _requestId) return;
-      setState(() => _view = _AuthGateView.error);
+      _showAccessScreen(_AuthGateView.error);
+    }
+  }
+
+  void _showAccessScreen(_AuthGateView view, {bool closeRoutes = true}) {
+    setState(() {
+      _placeMutations = null;
+      _view = view;
+    });
+    if (closeRoutes) {
+      Navigator.maybeOf(context)?.popUntil((route) => route.isFirst);
     }
   }
 
@@ -274,7 +378,7 @@ class _AuthGateState extends State<AuthGate> {
       }
     } catch (_) {
       if (!mounted) return;
-      setState(() => _view = _AuthGateView.error);
+      _showAccessScreen(_AuthGateView.error);
     }
   }
 
@@ -306,6 +410,9 @@ class _AuthGateState extends State<AuthGate> {
           districtsStream: widget.districtsStream,
           districtsStreamFactory: widget.districtsStreamFactory,
           mutationService: widget.districtMutationService,
+          placesStreamFactory: widget.placesStreamFactory,
+          placeMutations: () =>
+              _view == _AuthGateView.administrator ? _placeMutations : null,
           signOut: _signOut,
           isAdministrator: true,
         );

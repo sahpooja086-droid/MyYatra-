@@ -61,6 +61,30 @@ void main() {
     await authEvents.close();
   });
 
+  testWidgets('signing out of Manage Places closes administrator routes', (
+    tester,
+  ) async {
+    final authEvents = StreamController<bool>.broadcast();
+    addTearDown(authEvents.close);
+    await tester.pumpWidget(
+      _app(
+        signedInChanges: authEvents.stream,
+        checker: _FakeAuthorizationChecker(result: true),
+        signOut: () async => authEvents.add(false),
+      ),
+    );
+    authEvents.add(true);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('open-place-management')));
+    await tester.pumpAndSettle();
+    expect(find.text('Manage Places'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Log out'));
+    await tester.pumpAndSettle();
+    expect(find.text('Welcome to MyYatra'), findsOneWidget);
+    expect(find.byKey(const Key('add-place-button')), findsNothing);
+  });
+
   testWidgets('shows district management only for an admin', (tester) async {
     await tester.pumpWidget(
       _app(

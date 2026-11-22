@@ -120,6 +120,25 @@ class FirestoreDistrictRepository implements DistrictRepository {
     await _firestore.runTransaction<void>((transaction) async {
       final existing = await transaction.get(reference);
       if (!existing.exists) throw DistrictNotFoundException(id);
+      final index = await transaction.get(
+        _firestore.doc('internal/placeReferenceIndex'),
+      );
+      final counter = await transaction.get(
+        _firestore.doc('districtPlaceCounts/$id'),
+      );
+      final count = counter.exists ? counter.data()!['count'] : 0;
+      if (!index.exists || count is! int || count < 0) {
+        throw const DistrictServiceException(
+          'Place references need verification before this district can be '
+          'deleted. No changes were made.',
+        );
+      }
+      if (count > 0) {
+        throw const DistrictServiceException(
+          'This district cannot be deleted because one or more places '
+          'reference it.',
+        );
+      }
       transaction.delete(reference);
     });
   }
