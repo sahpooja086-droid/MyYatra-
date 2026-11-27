@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'auth_widgets.dart';
 import 'forgot_password_screen.dart';
+import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key, this.auth, this.notice});
@@ -99,6 +100,12 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       ),
     );
+  }
+
+  void _openRegistration() {
+    FocusScope.of(context).unfocus();
+    Navigator.of(context)
+        .push(MaterialPageRoute<void>(builder: (_) => const RegisterScreen()));
   }
 
   @override
@@ -211,14 +218,34 @@ class _LoginScreenState extends State<LoginScreen> {
                       onPressed: _signIn,
                     ),
                     const SizedBox(height: 20),
-                    const Text(
-                      'Use an existing account. New account registration '
-                      'is not available here.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: AuthPalette.mutedText,
-                        fontSize: 13,
-                      ),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        const Text(
+                          "Don't have an account? ",
+                          style: TextStyle(
+                            color: AuthPalette.mutedText,
+                            fontSize: 13,
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: _isLoading ? null : _openRegistration,
+                          style: TextButton.styleFrom(
+                            foregroundColor: AuthPalette.maroon,
+                            padding: EdgeInsets.zero,
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: const Text(
+                            'Register here',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),

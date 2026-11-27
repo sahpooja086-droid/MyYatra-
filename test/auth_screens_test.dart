@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:myyatra/screens/auth/forgot_password_screen.dart';
 import 'package:myyatra/screens/auth/login_screen.dart';
+import 'package:myyatra/screens/auth/register_screen.dart';
 
 void main() {
   group('LoginScreen', () {
@@ -62,6 +63,23 @@ void main() {
 
       expect(find.text('Forgot your password?'), findsOneWidget);
       expect(find.text('Send reset link'), findsOneWidget);
+    });
+
+    testWidgets('Register here link opens the registration screen', (
+      tester,
+    ) async {
+      await tester.pumpWidget(const MaterialApp(home: LoginScreen()));
+
+      expect(find.text('Register here'), findsOneWidget);
+      await tester.ensureVisible(find.text('Register here'));
+      await tester.tap(find.text('Register here'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(RegisterScreen), findsOneWidget);
+      expect(
+        find.text('Create your account and explore Nepal'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('sign-in and password reset use the injected Firebase Auth', (
