@@ -462,6 +462,14 @@ class _AuthGateState extends State<AuthGate> {
               _view == _AuthGateView.administrator ? _placeMutations : null,
           signOut: _signOut,
           isAdministrator: true,
+          onOpenDashboard: () => Navigator.of(context).push<void>(
+            MaterialPageRoute<void>(
+              builder: (_) => DashboardScreen(
+                email: _signedInEmail(),
+                onSignOut: _signOut,
+              ),
+            ),
+          ),
         );
       case _AuthGateView.nonAdministrator:
         return DashboardScreen(

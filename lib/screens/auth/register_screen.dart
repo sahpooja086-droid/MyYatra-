@@ -102,6 +102,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
         'uid': user.uid,
         'fullName': _nameController.text.trim(),
+        'displayName': _nameController.text.trim(),
         'email': _emailController.text.trim(),
         'policyAccepted': true,
         'policyVersion': '1.0',

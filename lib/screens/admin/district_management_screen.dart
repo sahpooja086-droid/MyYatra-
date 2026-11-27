@@ -21,6 +21,7 @@ class DistrictManagementScreen extends StatefulWidget {
     this.placeMutations,
     this.mutationService,
     this.signOut,
+    this.onOpenDashboard,
     this.isAdministrator = false,
   });
 
@@ -36,6 +37,9 @@ class DistrictManagementScreen extends StatefulWidget {
   /// The production [AuthGate] does not provide a write service.
   final DistrictMutationService? mutationService;
   final Future<void> Function()? signOut;
+
+  /// Lets an administrator open their personal traveller dashboard.
+  final VoidCallback? onOpenDashboard;
   final bool isAdministrator;
 
   @override
@@ -370,6 +374,13 @@ class _DistrictManagementScreenState extends State<DistrictManagementScreen> {
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
+          if (widget.onOpenDashboard != null)
+            IconButton(
+              key: const Key('open-dashboard'),
+              tooltip: 'My travel dashboard',
+              onPressed: widget.onOpenDashboard,
+              icon: const Icon(Icons.explore_outlined),
+            ),
           IconButton(
             key: const Key('open-place-management'),
             tooltip: widget.placesStreamFactory == null

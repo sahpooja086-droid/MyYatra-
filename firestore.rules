@@ -6,6 +6,158 @@ service cloud.firestore {
       return request.auth != null && request.auth.token.admin == true;
     }
 
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function validUserProfile(data) {
+      return data.keys().hasOnly([
+          'uid', 'fullName', 'displayName', 'email', 'policyAccepted',
+          'policyVersion', 'policyAcceptedAt', 'createdAt'
+        ])
+        && data.keys().hasAll([
+          'uid', 'fullName', 'displayName', 'email', 'policyAccepted', 'createdAt'
+        ])
+        && data.uid is string
+        && data.uid == request.auth.uid
+        && data.fullName is string
+        && data.fullName == data.fullName.trim()
+        && data.fullName.size() > 0
+        && data.fullName.size() <= 120
+        && data.displayName is string
+        && data.displayName == data.displayName.trim()
+        && data.displayName.size() > 0
+        && data.displayName.size() <= 80
+        && data.email is string
+        && data.email.size() > 0
+        && data.email.size() <= 320
+        && data.policyAccepted == true;
+    }
+
+    function validVisit(data) {
+      return data.keys().hasOnly([
+          'placeId', 'placeName', 'districtId', 'visitedAt', 'notes', 'rating',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasAll([
+          'placeId', 'placeName', 'districtId', 'visitedAt', 'notes', 'rating',
+          'createdAt', 'updatedAt'
+        ])
+        && data.placeId is string
+        && data.placeName is string
+        && data.placeName.size() <= 120
+        && data.districtId is string
+        && data.districtId.size() <= 80
+        && data.visitedAt is timestamp
+        && data.notes is string
+        && data.notes.size() <= 2000
+        && data.rating is int
+        && data.rating >= 1
+        && data.rating <= 5
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function validJournalEntry(data) {
+      return data.keys().hasOnly([
+          'title', 'body', 'placeId', 'districtId', 'entryDate', 'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasAll([
+          'title', 'body', 'placeId', 'districtId', 'entryDate', 'createdAt',
+          'updatedAt'
+        ])
+        && data.title is string
+        && data.title == data.title.trim()
+        && data.title.size() > 0
+        && data.title.size() <= 120
+        && data.body is string
+        && data.body.size() <= 5000
+        && data.placeId is string
+        && data.placeId.size() <= 160
+        && data.districtId is string
+        && data.districtId.size() <= 80
+        && data.entryDate is timestamp
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function validPhoto(data) {
+      return data.keys().hasOnly([
+          'downloadUrl', 'storagePath', 'caption', 'placeId', 'districtId',
+          'capturedAt', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasAll([
+          'downloadUrl', 'storagePath', 'caption', 'placeId', 'districtId',
+          'capturedAt', 'createdAt', 'updatedAt'
+        ])
+        && data.downloadUrl is string
+        && data.downloadUrl.matches('^https://[^/\\s]+(/[^\\s]*)?$')
+        && data.storagePath is string
+        && data.storagePath.size() > 0
+        && data.storagePath.size() <= 512
+        && data.caption is string
+        && data.caption.size() <= 500
+        && data.placeId is string
+        && data.placeId.size() <= 160
+        && data.districtId is string
+        && data.districtId.size() <= 80
+        && data.capturedAt is timestamp
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function validJourneyDna(data) {
+      return data.keys().hasOnly(['traits', 'summary', 'updatedAt'])
+        && data.keys().hasAll(['traits', 'summary', 'updatedAt'])
+        && data.traits is list
+        && data.traits.size() <= 12
+        && data.traits.hasOnly([
+          'Nature', 'Adventure', 'Culture', 'History', 'Food', 'Photography'
+        ])
+        && data.traits.toSet().size() == data.traits.size()
+        && data.summary is string
+        && data.summary.size() <= 1000
+        && data.updatedAt is timestamp;
+    }
+
+    function validReview(reviewId, data) {
+      return data.keys().hasOnly([
+          'ownerUid', 'displayName', 'targetType', 'targetId', 'rating', 'text',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasAll([
+          'ownerUid', 'displayName', 'targetType', 'targetId', 'rating', 'text',
+          'createdAt', 'updatedAt'
+        ])
+        && data.ownerUid is string
+        && data.ownerUid == request.auth.uid
+        && data.displayName is string
+        && data.displayName == data.displayName.trim()
+        && data.displayName.size() > 0
+        && data.displayName.size() <= 80
+        && !data.displayName.matches('.*@.*\\..*')
+        && data.targetType in ['place', 'district']
+        && data.targetId is string
+        && data.targetId.size() > 0
+        && data.targetId.size() <= 160
+        && data.rating is int
+        && data.rating >= 1
+        && data.rating <= 5
+        && data.text is string
+        && data.text == data.text.trim()
+        && data.text.size() > 0
+        && data.text.size() <= 2000
+        && reviewId == request.auth.uid + '--' + data.targetType + '--'
+          + data.targetId
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
     function canonicalDistricts() {
       return {
         'Bhojpur': {'id': 'bhojpur', 'province': 'Koshi'},
@@ -262,6 +414,60 @@ service cloud.firestore {
         && validPlaceData(placeId, resource.data)
         && isCanonicalDistrictReference(resource.data.districtId)
         && changesPlaceCount(resource.data.districtId, placeId, -1);
+    }
+
+    // Account profiles are private. Only the owner can read or write them.
+    match /users/{uid} {
+      allow get, list: if isOwner(uid);
+      allow create: if isOwner(uid) && validUserProfile(request.resource.data);
+      allow update: if isOwner(uid)
+        && validUserProfile(request.resource.data)
+        && request.resource.data.uid == resource.data.uid;
+      allow delete: if false;
+    }
+
+    // Personal travel records live under the owner's account document, so no
+    // other user has a readable path to them.
+    match /users/{uid}/visits/{visitId} {
+      allow get, list: if isOwner(uid);
+      allow create, update: if isOwner(uid) && validVisit(request.resource.data);
+      allow delete: if isOwner(uid);
+    }
+
+    match /users/{uid}/journalEntries/{entryId} {
+      allow get, list: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && validJournalEntry(request.resource.data);
+      allow delete: if isOwner(uid);
+    }
+
+    match /users/{uid}/photos/{photoId} {
+      allow get, list: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && validPhoto(request.resource.data)
+        && request.resource.data.storagePath.matches(
+          '^users/' + uid + '/photos/[^/\\s]+$'
+        );
+      allow delete: if isOwner(uid);
+    }
+
+    match /users/{uid}/journeyDna/{documentId} {
+      allow get, list: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && validJourneyDna(request.resource.data);
+      allow delete: if isOwner(uid);
+    }
+
+    // Reviews are public, but only the display name is exposed alongside the
+    // review content. Email addresses are rejected by validReview().
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if isSignedIn() && validReview(reviewId, request.resource.data);
+      allow update: if isSignedIn()
+        && request.auth.uid == resource.data.ownerUid
+        && validReview(reviewId, request.resource.data);
+      allow delete: if isSignedIn()
+        && request.auth.uid == resource.data.ownerUid;
     }
 
     // No rules are granted for any other collection or document.

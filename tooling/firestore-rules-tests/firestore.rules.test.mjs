@@ -591,6 +591,151 @@ test('an uninitialized reference index blocks deletion of pre-existing districts
   await assertFails(deleteDoc(district));
 });
 
+test('a user can read and write only their own profile', async () => {
+  const owner = testEnvironment.authenticatedContext('traveler-uid').firestore();
+  const profile = doc(owner, 'users', 'traveler-uid');
+  await assertSucceeds(setDoc(profile, userProfile('traveler-uid')));
+
+  const other = testEnvironment.authenticatedContext('other-uid').firestore();
+  await assertFails(getDoc(doc(other, 'users', 'traveler-uid')));
+  await assertFails(
+    setDoc(doc(other, 'users', 'traveler-uid'), userProfile('other-uid')),
+  );
+
+  const signedOut = testEnvironment.unauthenticatedContext().firestore();
+  await assertFails(getDoc(doc(signedOut, 'users', 'traveler-uid')));
+});
+
+test('visits, journal entries, photos, and Journey DNA stay private', async () => {
+  const owner = testEnvironment.authenticatedContext('traveler-uid').firestore();
+  const visitId = 'visit-1';
+  const entryId = 'entry-1';
+  const photoId = 'photo-1';
+  await assertSucceeds(
+    setDoc(doc(owner, 'users/traveler-uid/visits', visitId), visitData()),
+  );
+  await assertSucceeds(
+    setDoc(
+      doc(owner, 'users/traveler-uid/journalEntries', entryId),
+      journalData(),
+    ),
+  );
+  await assertSucceeds(
+    setDoc(doc(owner, 'users/traveler-uid/photos', photoId), photoData()),
+  );
+  await assertSucceeds(
+    setDoc(
+      doc(owner, 'users/traveler-uid/journeyDna', 'current'),
+      journeyDnaData(),
+    ),
+  );
+
+  await assertSucceeds(
+    getDoc(doc(owner, 'users/traveler-uid/visits', visitId)),
+  );
+  await assertSucceeds(
+    deleteDoc(doc(owner, 'users/traveler-uid/journalEntries', entryId)),
+  );
+
+  const other = testEnvironment.authenticatedContext('other-uid').firestore();
+  for (const path of [
+    ['visits', visitId],
+    ['journalEntries', entryId],
+    ['photos', photoId],
+    ['journeyDna', 'current'],
+  ]) {
+    await assertFails(getDoc(doc(other, `users/traveler-uid/${path[0]}`, path[1])));
+    await assertFails(
+      getDocs(collection(other, `users/traveler-uid/${path[0]}`)),
+    );
+  }
+  await assertFails(
+    setDoc(doc(other, 'users/traveler-uid/visits', 'intruder'), visitData()),
+  );
+  await assertFails(
+    setDoc(
+      doc(other, 'users/traveler-uid/photos', 'intruder'),
+      photoData('users/traveler-uid/photos/intruder.jpg'),
+    ),
+  );
+
+  const signedOut = testEnvironment.unauthenticatedContext().firestore();
+  await assertFails(
+    getDoc(doc(signedOut, 'users/traveler-uid/visits', visitId)),
+  );
+});
+
+test('private travel records reject malformed data and foreign photo paths',
+  async () => {
+    const owner = testEnvironment.authenticatedContext('traveler-uid').firestore();
+    const invalidVisit = visitData();
+    invalidVisit.rating = 9;
+    await assertFails(
+      setDoc(doc(owner, 'users/traveler-uid/visits', 'bad'), invalidVisit),
+    );
+
+    const foreignPhoto = photoData('users/other-uid/photos/stolen.jpg');
+    await assertFails(
+      setDoc(doc(owner, 'users/traveler-uid/photos', 'bad'), foreignPhoto),
+    );
+
+    const invalidProfile = userProfile('traveler-uid');
+    delete invalidProfile.displayName;
+    await assertFails(
+      setDoc(doc(owner, 'users', 'traveler-uid'), invalidProfile),
+    );
+  },
+);
+
+test('reviews are public but only the author can write and edit them', async () => {
+  const reviewId = 'traveler-uid--place--kaski--sarangkot';
+  const owner = testEnvironment.authenticatedContext('traveler-uid').firestore();
+  await assertSucceeds(
+    setDoc(doc(owner, 'reviews', reviewId), reviewData('traveler-uid')),
+  );
+
+  const reader = testEnvironment.authenticatedContext('other-uid').firestore();
+  const visible = await assertSucceeds(getDoc(doc(reader, 'reviews', reviewId)));
+  assert.equal(visible.data().displayName, 'Pooja Traveler');
+  assert.equal(Object.hasOwn(visible.data(), 'email'), false);
+
+  const signedOut = testEnvironment.unauthenticatedContext().firestore();
+  await assertSucceeds(getDoc(doc(signedOut, 'reviews', reviewId)));
+
+  await assertFails(
+    updateDoc(doc(reader, 'reviews', reviewId), {
+      text: 'Edited by someone else',
+      updatedAt: Timestamp.now(),
+    }),
+  );
+  await assertFails(deleteDoc(doc(reader, 'reviews', reviewId)));
+  await assertFails(
+    setDoc(
+      doc(owner, 'reviews', reviewId),
+      { ...reviewData('traveler-uid'), email: 'private@example.com' },
+    ),
+  );
+  await assertFails(
+    setDoc(
+      doc(owner, 'reviews', 'traveler-uid--place--kaski--sarangkot'),
+      { ...reviewData('traveler-uid'), displayName: 'private@example.com' },
+    ),
+  );
+});
+
+test('reviews cannot be posted under another user or at a forged ID', async () => {
+  const owner = testEnvironment.authenticatedContext('traveler-uid').firestore();
+  await assertFails(
+    setDoc(
+      doc(owner, 'reviews', 'traveler-uid--place--kaski--sarangkot'),
+      reviewData('other-uid'),
+    ),
+  );
+  await assertFails(
+    setDoc(doc(owner, 'reviews', 'arbitrary-review-id'), reviewData('traveler-uid')),
+  );
+});
+
 async function seedDistrict(id, data) {
   await testEnvironment.withSecurityRulesDisabled(async (context) => {
     await setDoc(doc(context.firestore(), 'districts', id), data);
@@ -631,6 +776,78 @@ function placeData(name, category, districtId) {
     category,
     districtId,
     description: `${name} travel information`,
+    updatedAt: Timestamp.now(),
+  };
+}
+
+function userProfile(uid) {
+  return {
+    uid,
+    fullName: 'Pooja Traveler',
+    displayName: 'Pooja Traveler',
+    email: 'pooja@example.com',
+    policyAccepted: true,
+    policyVersion: '1.0',
+    policyAcceptedAt: Timestamp.now(),
+    createdAt: Timestamp.now(),
+  };
+}
+
+function visitData() {
+  return {
+    placeId: 'kaski--sarangkot',
+    placeName: 'Sarangkot',
+    districtId: 'kaski',
+    visitedAt: Timestamp.now(),
+    notes: 'Sunrise hike',
+    rating: 5,
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
+  };
+}
+
+function journalData() {
+  return {
+    title: 'Sunrise at Sarangkot',
+    body: 'The mountains were clear this morning.',
+    placeId: 'kaski--sarangkot',
+    districtId: 'kaski',
+    entryDate: Timestamp.now(),
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
+  };
+}
+
+function photoData(storagePath = 'users/traveler-uid/photos/sunrise.jpg') {
+  return {
+    downloadUrl: 'https://example.com/sunrise.jpg',
+    storagePath,
+    caption: 'First light over the Annapurnas',
+    placeId: 'kaski--sarangkot',
+    districtId: 'kaski',
+    capturedAt: Timestamp.now(),
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
+  };
+}
+
+function journeyDnaData() {
+  return {
+    traits: ['Nature', 'Photography'],
+    summary: 'You seek quiet mountain mornings.',
+    updatedAt: Timestamp.now(),
+  };
+}
+
+function reviewData(ownerUid) {
+  return {
+    ownerUid,
+    displayName: 'Pooja Traveler',
+    targetType: 'place',
+    targetId: 'kaski--sarangkot',
+    rating: 5,
+    text: 'Beautiful sunrise viewpoint.',
+    createdAt: Timestamp.now(),
     updatedAt: Timestamp.now(),
   };
 }
