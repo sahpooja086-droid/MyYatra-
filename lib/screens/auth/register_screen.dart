@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -42,30 +41,24 @@ class _RegisterScreenState extends State<RegisterScreen> {
       builder: (context) => AlertDialog(
         title: const Text(
           'Privacy Policy & Terms',
-          style: TextStyle(
-            color: maroon,
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(color: maroon, fontWeight: FontWeight.bold),
         ),
         content: const SingleChildScrollView(
           child: Text(
             'MyYatra Privacy Policy\n\n'
-                'By creating an account, you agree that MyYatra '
-                'may collect and store your name and email address '
-                'to provide its services.\n\n'
-                'Your information will be used for account management '
-                'and improving your experience.\n\n'
-                'Please review the official privacy policy before '
-                'using the application.',
+            'By creating an account, you agree that MyYatra '
+            'may collect and store your name and email address '
+            'to provide its services.\n\n'
+            'Your information will be used for account management '
+            'and improving your experience.\n\n'
+            'Please review the official privacy policy before '
+            'using the application.',
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text(
-              'Close',
-              style: TextStyle(color: maroon),
-            ),
+            child: const Text('Close', style: TextStyle(color: maroon)),
           ),
         ],
       ),
@@ -80,9 +73,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (!_policyAccepted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Please accept the Privacy Policy & Terms.',
-          ),
+          content: Text('Please accept the Privacy Policy & Terms.'),
           backgroundColor: maroon,
         ),
       );
@@ -96,9 +87,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
     try {
       final credential = await FirebaseAuth.instance
           .createUserWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-      );
+            email: _emailController.text.trim(),
+            password: _passwordController.text.trim(),
+          );
 
       final user = credential.user;
 
@@ -106,14 +97,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
         throw Exception('Unable to create user account.');
       }
 
-      await user.updateDisplayName(
-        _nameController.text.trim(),
-      );
+      await user.updateDisplayName(_nameController.text.trim());
 
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .set({
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
         'uid': user.uid,
         'fullName': _nameController.text.trim(),
         'email': _emailController.text.trim(),
@@ -152,12 +138,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: maroon,
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message), backgroundColor: maroon));
     } catch (e) {
       if (!mounted) return;
 
@@ -196,14 +179,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
         prefixIcon: Icon(icon, color: maroon),
         suffixIcon: isPassword
             ? IconButton(
-          icon: Icon(
-            obscureText
-                ? Icons.visibility_off
-                : Icons.visibility,
-            color: maroon,
-          ),
-          onPressed: toggleVisibility,
-        )
+                icon: Icon(
+                  obscureText ? Icons.visibility_off : Icons.visibility,
+                  color: maroon,
+                ),
+                onPressed: toggleVisibility,
+              )
             : null,
         filled: true,
         fillColor: cream,
@@ -213,16 +194,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(
-            color: maroon.withOpacity(0.15),
-          ),
+          borderSide: BorderSide(color: maroon.withOpacity(0.15)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(
-            color: maroon,
-            width: 1.5,
-          ),
+          borderSide: const BorderSide(color: maroon, width: 1.5),
         ),
       ),
     );
@@ -236,10 +212,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
-                colors: [
-                  Color(0xFFFFF8EF),
-                  Color(0xFFFFE9DE),
-                ],
+                colors: [Color(0xFFFFF8EF), Color(0xFFFFE9DE)],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
               ),
@@ -249,16 +222,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
           SafeArea(
             child: Center(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(
-                  22,
-                  18,
-                  22,
-                  110,
-                ),
+                padding: const EdgeInsets.fromLTRB(22, 18, 22, 110),
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(
-                    maxWidth: 420,
-                  ),
+                  constraints: const BoxConstraints(maxWidth: 420),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -268,6 +234,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         height: 115,
                         width: 180,
                         fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) =>
+                            const Icon(
+                              Icons.travel_explore,
+                              size: 72,
+                              color: maroon,
+                            ),
                       ),
 
                       const SizedBox(height: 8),
@@ -287,10 +259,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       const Text(
                         'Create your account and explore Nepal',
                         textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.black54,
-                          fontSize: 13,
-                        ),
+                        style: TextStyle(color: Colors.black54, fontSize: 13),
                       ),
 
                       const SizedBox(height: 22),
@@ -308,16 +277,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           child: Form(
                             key: _formKey,
                             child: Column(
-                              crossAxisAlignment:
-                              CrossAxisAlignment.stretch,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 _buildTextField(
                                   controller: _nameController,
                                   label: 'Full Name',
                                   icon: Icons.person_outline,
                                   validator: (value) {
-                                    if (value == null ||
-                                        value.trim().isEmpty) {
+                                    if (value == null || value.trim().isEmpty) {
                                       return 'Please enter your full name';
                                     }
                                     return null;
@@ -330,16 +297,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                   controller: _emailController,
                                   label: 'Email Address',
                                   icon: Icons.email_outlined,
-                                  keyboardType:
-                                  TextInputType.emailAddress,
+                                  keyboardType: TextInputType.emailAddress,
                                   validator: (value) {
-                                    if (value == null ||
-                                        value.trim().isEmpty) {
+                                    if (value == null || value.trim().isEmpty) {
                                       return 'Please enter your email';
                                     }
-                                    if (!RegExp(
-                                      r'^[^@]+@[^@]+\.[^@]+',
-                                    ).hasMatch(value.trim())) {
+                                    if (!RegExp(r'^[^@]+@[^@]+\.[^@]+')
+                                        .hasMatch(value.trim())) {
                                       return 'Please enter a valid email';
                                     }
                                     return null;
@@ -356,13 +320,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                   obscureText: _obscurePassword,
                                   toggleVisibility: () {
                                     setState(() {
-                                      _obscurePassword =
-                                      !_obscurePassword;
+                                      _obscurePassword = !_obscurePassword;
                                     });
                                   },
                                   validator: (value) {
-                                    if (value == null ||
-                                        value.isEmpty) {
+                                    if (value == null || value.isEmpty) {
                                       return 'Please enter a password';
                                     }
                                     if (value.length < 6) {
@@ -375,26 +337,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 const SizedBox(height: 16),
 
                                 _buildTextField(
-                                  controller:
-                                  _confirmPasswordController,
+                                  controller: _confirmPasswordController,
                                   label: 'Confirm Password',
                                   icon: Icons.lock_outline,
                                   isPassword: true,
-                                  obscureText:
-                                  _obscureConfirmPassword,
+                                  obscureText: _obscureConfirmPassword,
                                   toggleVisibility: () {
                                     setState(() {
                                       _obscureConfirmPassword =
-                                      !_obscureConfirmPassword;
+                                          !_obscureConfirmPassword;
                                     });
                                   },
                                   validator: (value) {
-                                    if (value == null ||
-                                        value.isEmpty) {
+                                    if (value == null || value.isEmpty) {
                                       return 'Please confirm your password';
                                     }
-                                    if (value !=
-                                        _passwordController.text) {
+                                    if (value != _passwordController.text) {
                                       return 'Passwords do not match';
                                     }
                                     return null;
@@ -404,16 +362,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 const SizedBox(height: 12),
 
                                 Row(
-                                  crossAxisAlignment:
-                                  CrossAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
                                   children: [
                                     Checkbox(
                                       value: _policyAccepted,
                                       activeColor: maroon,
                                       onChanged: (value) {
                                         setState(() {
-                                          _policyAccepted =
-                                              value ?? false;
+                                          _policyAccepted = value ?? false;
                                         });
                                       },
                                     ),
@@ -422,23 +378,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                         children: [
                                           const Text(
                                             'I agree to the ',
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                            ),
+                                            style: TextStyle(fontSize: 12),
                                           ),
                                           GestureDetector(
-                                            onTap:
-                                            _showPrivacyPolicy,
+                                            onTap: _showPrivacyPolicy,
                                             child: const Text(
                                               'Privacy Policy & Terms',
                                               style: TextStyle(
                                                 color: maroon,
-                                                fontWeight:
-                                                FontWeight.bold,
+                                                fontWeight: FontWeight.bold,
                                                 fontSize: 12,
                                                 decoration:
-                                                TextDecoration
-                                                    .underline,
+                                                    TextDecoration.underline,
                                               ),
                                             ),
                                           ),
@@ -453,38 +404,31 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 SizedBox(
                                   height: 50,
                                   child: ElevatedButton(
-                                    onPressed: _isLoading
-                                        ? null
-                                        : _register,
-                                    style:
-                                    ElevatedButton.styleFrom(
+                                    onPressed: _isLoading ? null : _register,
+                                    style: ElevatedButton.styleFrom(
                                       backgroundColor: maroon,
                                       foregroundColor: Colors.white,
-                                      shape:
-                                      RoundedRectangleBorder(
-                                        borderRadius:
-                                        BorderRadius.circular(12),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
                                       ),
                                       elevation: 2,
                                     ),
                                     child: _isLoading
                                         ? const SizedBox(
-                                      height: 21,
-                                      width: 21,
-                                      child:
-                                      CircularProgressIndicator(
-                                        color: Colors.white,
-                                        strokeWidth: 2,
-                                      ),
-                                    )
+                                            height: 21,
+                                            width: 21,
+                                            child: CircularProgressIndicator(
+                                              color: Colors.white,
+                                              strokeWidth: 2,
+                                            ),
+                                          )
                                         : const Text(
-                                      'Create Account',
-                                      style: TextStyle(
-                                        fontWeight:
-                                        FontWeight.bold,
-                                        fontSize: 13,
-                                      ),
-                                    ),
+                                            'Create Account',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 13,
+                                            ),
+                                          ),
                                   ),
                                 ),
                               ],
