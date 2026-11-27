@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "590072048751",
-    "project_id": "myyatra-e873c",
-    "storage_bucket": "myyatra-e873c.firebasestorage.app"
+    "project_number": "856562709852",
+    "project_id": "myyatra-8ebf0",
+    "storage_bucket": "myyatra-8ebf0.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:590072048751:android:8bb46be428098492b4b19a",
+        "mobilesdk_app_id": "1:856562709852:android:e397d95204a5676a247d99",
         "android_client_info": {
           "package_name": "com.example.myyatra"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAw19waGvS5A6EJF4JQxd1cJeBftM-6b1k"
+          "current_key": "AIzaSyBEz3SVjtVNORG_OhkfLA2uLcf3dBmYCsw"
         }
       ],
       "services": {

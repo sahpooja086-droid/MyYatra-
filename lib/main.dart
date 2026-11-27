@@ -28,11 +28,15 @@ const bool _enableEmulatorDistrictCrud = bool.fromEnvironment(
 const bool _enableEmulatorPlaceCrud = bool.fromEnvironment(
   'MYYATRA_ENABLE_EMULATOR_PLACE_CRUD',
 );
+const bool _useCloudFirebase = bool.fromEnvironment(
+  'MYYATRA_USE_CLOUD_FIREBASE',
+);
 const String _firestoreEmulatorHost = String.fromEnvironment(
   'MYYATRA_FIRESTORE_EMULATOR_HOST',
   defaultValue: '10.0.2.2',
 );
 const String _emulatorProjectId = 'demo-myyatra';
+const String _cloudDebugProjectId = 'myyatra-8ebf0';
 const _localEmulatorHosts = {'10.0.2.2', '127.0.0.1', 'localhost', '::1'};
 const FirebaseOptions _emulatorFirebaseOptions = FirebaseOptions(
   apiKey: 'demo-api-key',
@@ -42,6 +46,20 @@ const FirebaseOptions _emulatorFirebaseOptions = FirebaseOptions(
 );
 
 Future<void> main() async {
+  if (_useCloudFirebase) {
+    final error = cloudDebugConfigurationError(
+      isAndroidDebug:
+          kDebugMode &&
+          !kIsWeb &&
+          defaultTargetPlatform == TargetPlatform.android,
+      districtEmulator: _enableEmulatorDistrictCrud,
+      placeEmulator: _enableEmulatorPlaceCrud,
+      emulatorHostSpecified: const bool.hasEnvironment(
+        'MYYATRA_FIRESTORE_EMULATOR_HOST',
+      ),
+    );
+    if (error != null) throw StateError(error);
+  }
   if (_enableEmulatorPlaceCrud &&
       (!_enableEmulatorDistrictCrud || !kDebugMode)) {
     throw StateError('Place CRUD requires debug Firebase Emulator mode.');
@@ -60,8 +78,31 @@ Future<void> main() async {
 
   WidgetsFlutterBinding.ensureInitialized();
 
+  if (kDebugMode &&
+      !kIsWeb &&
+      defaultTargetPlatform == TargetPlatform.android &&
+      !_enableEmulatorDistrictCrud &&
+      !_useCloudFirebase) {
+    _showEmulatorStartupProblem(
+      'Add --dart-define=MYYATRA_ENABLE_EMULATOR_DISTRICT_CRUD=true to the '
+      'Android Studio run configuration for local testing, or use '
+      '--dart-define=MYYATRA_USE_CLOUD_FIREBASE=true for cloud sign-in. '
+      'Then stop and rerun MyYatra.',
+    );
+    return;
+  }
+
+  final emulatorHost = emulatorHostForPlatform(
+    _firestoreEmulatorHost,
+    defaultTargetPlatform,
+  );
   if (_enableEmulatorDistrictCrud) {
-    await _verifyEmulatorsReachable();
+    try {
+      await _verifyEmulatorsReachable(emulatorHost);
+    } on StateError catch (error) {
+      _showEmulatorStartupProblem(error.message.toString());
+      return;
+    }
   }
 
   FirebaseAuth? firebaseAuth;
@@ -79,11 +120,15 @@ Future<void> main() async {
     }
 
     final auth = FirebaseAuth.instanceFor(app: firebaseApp);
-    await auth.useAuthEmulator(_firestoreEmulatorHost, 9099);
+    await auth.useAuthEmulator(emulatorHost, 9099);
     firebaseAuth = auth;
 
     final firestore = FirebaseFirestore.instanceFor(app: firebaseApp);
-    firestore.useFirestoreEmulator(_firestoreEmulatorHost, 8080);
+    firestore.useFirestoreEmulator(emulatorHost, 8080);
+    debugPrint(
+      'MyYatra Firebase project: $_emulatorProjectId. '
+      'Local Auth: $emulatorHost:9099. Local Firestore: $emulatorHost:8080.',
+    );
     final settings = firestore.settings;
     if (settings.sslEnabled == false &&
         _localEmulatorHosts.any((host) => settings.host == '$host:8080')) {
@@ -110,9 +155,24 @@ Future<void> main() async {
     );
     districtMutationService = districtService;
   } else {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
+    final options = DefaultFirebaseOptions.currentPlatform;
+    if (_useCloudFirebase && options.projectId != _cloudDebugProjectId) {
+      throw StateError(
+        'Cloud debug mode requires Firebase project $_cloudDebugProjectId.',
+      );
+    }
+    final firebaseApp = await Firebase.initializeApp(options: options);
+    if (_useCloudFirebase) {
+      if (firebaseApp.options.projectId != _cloudDebugProjectId) {
+        throw StateError(
+          'The Android Firebase app does not match $_cloudDebugProjectId.',
+        );
+      }
+      firebaseAuth = FirebaseAuth.instanceFor(app: firebaseApp);
+      debugPrint(
+        'MyYatra Firebase project: $_cloudDebugProjectId. Cloud debug sign-in.',
+      );
+    }
   }
 
   runApp(
@@ -124,6 +184,22 @@ Future<void> main() async {
       verifiedPlaceMutations: verifiedPlaceMutations,
     ),
   );
+}
+
+@visibleForTesting
+String? cloudDebugConfigurationError({
+  required bool isAndroidDebug,
+  bool districtEmulator = false,
+  bool placeEmulator = false,
+  bool emulatorHostSpecified = false,
+}) {
+  if (districtEmulator || placeEmulator || emulatorHostSpecified) {
+    return 'MYYATRA_USE_CLOUD_FIREBASE cannot be combined with Firebase emulator flags.';
+  }
+  if (!isAndroidDebug) {
+    return 'MYYATRA_USE_CLOUD_FIREBASE is available only in Android debug builds.';
+  }
+  return null;
 }
 
 Future<bool> _verifyPlaceMutations(FirebaseFirestore firestore) async {
@@ -170,25 +246,46 @@ Future<bool> _verifyPlaceMutations(FirebaseFirestore firestore) async {
   }
 }
 
-Future<void> _verifyEmulatorsReachable() async {
+@visibleForTesting
+String emulatorHostForPlatform(String host, TargetPlatform platform) {
+  if (platform == TargetPlatform.android &&
+      const {'127.0.0.1', 'localhost', '::1'}.contains(host)) {
+    return '10.0.2.2';
+  }
+  return host;
+}
+
+void _showEmulatorStartupProblem(String message) {
+  runApp(
+    MaterialApp(
+      home: Scaffold(
+        appBar: AppBar(title: const Text('MyYatra local Firebase setup')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(message, textAlign: TextAlign.center),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+Future<void> _verifyEmulatorsReachable(String host) async {
   for (final port in [9099, 8080]) {
+    final emulator = port == 9099 ? 'Auth' : 'Firestore';
     Socket? socket;
     try {
       socket = await Socket.connect(
-        _firestoreEmulatorHost,
+        host,
         port,
         timeout: const Duration(seconds: 3),
       );
-    } on SocketException catch (error) {
+    } on Exception catch (error) {
+      if (error is! SocketException && error is! TimeoutException) rethrow;
       throw StateError(
-        'The demo Firebase Emulator on port $port is unavailable. Start '
-        'both Auth and Firestore emulators before launching emulator mode. '
-        'Details: $error',
-      );
-    } on TimeoutException catch (error) {
-      throw StateError(
-        'Timed out checking the demo Firebase Emulator on port $port. '
-        'No production fallback is available. Details: $error',
+        'Could not reach the local $emulator Emulator at $host:$port. '
+        'Start both demo-myyatra emulators and rerun MyYatra.',
       );
     } finally {
       socket?.destroy();
@@ -447,6 +544,7 @@ class _AuthGateState extends State<AuthGate> {
       case _AuthGateView.signedOut:
         return LoginScreen(
           auth: widget.firebaseAuth,
+          useEmulator: _enableEmulatorDistrictCrud,
           notice: _signedOutForInactivity
               ? 'You were signed out because you were inactive. '
                     'Please sign in again.'
